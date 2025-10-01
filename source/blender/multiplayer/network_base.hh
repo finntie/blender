@@ -15,13 +15,80 @@
 #include <variant>
 #include <vector>
 
+#include "BLI_map.hh"
+#include "BLI_vector.hh"
+
 #define MAXPACKAGESIZE 1024
 
 class Dance {
+
  public:
+  /* Mode of connection. */
   enum dance_moves { SAMEDEVICE, LAN, PUBLIC };
 
+ private:
+  struct important_message_struct {
+    std::string message{};
+    uint32_t ID = 0;
+    int checks_done = 0; /* How many checks it already did. */
+  };
+
+  /* IP information */
+  int ipv_ = AF_INET; /* #AF_INET or #AF_INET6 for ipv4 or ipv6 */
+  int total_connections_ = 0;
+
+  /* Winsock Variables */
+  SOCKET sockfd_{};
+
+  /* Device Information */
+  std::string name_ = "NONE";
+  std::string device_name_ = "0";
+  char host_port_[5] = "8392";
+  bool is_host_ = false;
+  std::atomic<bool> quit_listening_ = false; /* Will only be set by the main thread exiting */
+  std::atomic<bool> quit_callback_ = false;  /* Will only be set by the main thread exiting */
+  int hole_punching_status_ = 0;
+  dance_moves current_moves_ = SAMEDEVICE;
+
+  /* Other important information */
+  float keep_alive_time_ = 60.0f;
+  float quick_keep_alive_time_ = 0.5f;
+  int max_connections_ = 10; /* Standard is 10 */
+  std::deque<std::string> received_messages_{};
+  blender::Map<uint32_t, important_message_struct> important_send_messages_{};
+  std::queue<std::string> user_package_storage_{};
+  blender::Map<std::string, std::function<void(const std::string &)>> callback_functions_;
+  std::future<bool> connection_made_;
+  std::thread listen_thread_;
+  std::thread callback_thread_;
+
+  bool use_callback_functions_ = false;
+  bool force_IPV4_ = false;
+  blender::Vector<int> disconnected_user_IDs_{};
+  int at_player_number_ = 1;
+  uint32_t at_imp_message_ = 0;
+  uint64_t last_time_ = 0;
+  float time_checked_imp_ = 0.0f;
+
+  /* thread safety */
+  std::mutex message_vector_mutex_;
+  std::mutex callback_mutex_;
+
+  /* Map of Data Lists, which holds the data. Data types can be expanded. */
+  blender::Map<
+      std::string,
+      blender::Vector<std::variant<int, float, uint32_t, const char *, std::string, double, bool>>>
+      package_map_{};
+
+  /* Map of others, key = name */
+  blender::Map<std::string, struct addrinfo *> them_addrss_{};
+  blender::Map<std::string, int> them_numbers_{};
+  /* Vector of connections that are confirmed. */
+  blender::Vector<struct addrinfo *> hole_punch_confirmed_connections_{};
+
+ public:
   Dance() {};
+
   ~Dance();
 
   /**
@@ -53,7 +120,7 @@ class Dance {
                int max_connections_count,
                const char *port = 0,
                bool force_IPV4 = false,
-               const std::vector<std::string> &clients_IP = std::vector<std::string>());
+               const blender::Vector<std::string> &clients_IP = blender::Vector<std::string>());
 
   /**
    * Connect to a server.
@@ -167,7 +234,7 @@ class Dance {
   {
     /* Making a vector with all the parameters the user has put in.
      */
-    std::vector<std::variant<int, float, uint32_t, const char *, std::string, double, bool>>
+    blender::Vector<std::variant<int, float, uint32_t, const char *, std::string, double, bool>>
         input_vector{args...};
     package_map_.emplace(std::make_pair(package_name, input_vector));
   }
@@ -208,10 +275,10 @@ class Dance {
   void MU_delete_parameter_from_package(std::string package_name, int number, bool all)
   {
     if (all) {
-      package_map_[package_name].clear();
+      package_map_.lookup(package_name).clear();
     }
     else {
-      package_map_[package_name].erase(package_map_[package_name].begin() + number);
+      package_map_.lookup(package_name).remove(number);
     }
   }
 
@@ -225,7 +292,7 @@ class Dance {
   void MU_create_package_callback_function(std::string package_name,
                                            std::function<void(const std::string &data)> function)
   {
-    callback_functions_.emplace(std::make_pair(package_name, function));
+    callback_functions_.add(package_name, function);
   }
 
   /**
@@ -268,7 +335,7 @@ class Dance {
 
   struct return_package_info {
     bool succeeded = false;
-    std::vector<std::variant<int, float, uint32_t, const char *, std::string, double, bool>>
+    blender::Vector<std::variant<int, float, uint32_t, const char *, std::string, double, bool>>
         variable_vector;
     template<typename T> T get_variable(int Index)
     {
@@ -409,63 +476,4 @@ class Dance {
   static const char *get_send_errors(int error_code);
 
   /** \} */
-
-  struct important_message_struct {
-    std::string message{};
-    uint32_t ID = 0;
-    int checks_done = 0; /* How many checks it already did. */
-  };
-
-  /* IP information */
-  int ipv_ = AF_INET; /* #AF_INET or #AF_INET6 for ipv4 or ipv6 */
-  int total_connections_ = 0;
-
-  /* Winsock Variables */
-  SOCKET sockfd_{};
-
-  /* Device Information */
-  std::string name_ = "NONE";
-  std::string device_name_ = "0";
-  char host_port_[5] = "8392";
-  bool is_host_ = false;
-  std::atomic<bool> quit_listening_ = false; /* Will only be set by the main thread exiting */
-  std::atomic<bool> quit_callback_ = false;  /* Will only be set by the main thread exiting */
-  int hole_punching_status_ = 0;
-  dance_moves current_moves_ = SAMEDEVICE;
-
-  /* Other important information */
-  float keep_alive_time_ = 60.0f;
-  float quick_keep_alive_time_ = 0.5f;
-  int max_connections_ = 10; /* Standard is 10 */
-  std::deque<std::string> received_messages_{};
-  std::unordered_map<uint32_t, important_message_struct> important_send_messages_{};
-  std::queue<std::string> user_package_storage_{};
-  std::map<std::string, std::function<void(const std::string &)>> callback_functions_;
-  std::future<bool> connection_made_;
-  std::thread listen_thread_;
-  std::thread callback_thread_;
-
-  bool use_callback_functions_ = false;
-  bool force_IPV4_ = false;
-  std::vector<int> disconnected_user_IDs_{};
-  int at_player_number_ = 1;
-  uint32_t at_imp_message_ = 0;
-  uint64_t last_time_ = 0;
-  float time_checked_imp_ = 0.0f;
-
-  /* thread safety */
-  std::mutex message_vector_mutex_;
-  std::mutex callback_mutex_;
-
-  /* Map of Data Lists, which holds the data. Data types can be expanded. */
-  std::map<
-      std::string,
-      std::vector<std::variant<int, float, uint32_t, const char *, std::string, double, bool>>>
-      package_map_{};
-
-  /* Map of others, key = name */
-  std::map<std::string, struct addrinfo *> them_addrss_{};
-  std::map<std::string, int> them_numbers_{};
-  /* Vector of connections that are confirmed. */
-  std::vector<struct addrinfo *> hole_punch_confirmed_connections_{};
 };

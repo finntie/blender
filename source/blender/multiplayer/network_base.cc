@@ -25,13 +25,10 @@ Dance::~Dance()
 {
   /* If still connections, tell that we disconnected. */
   const char *message = "Disconnect";
-  for (const auto &pair : them_addrss_) {
-    if (sendto(sockfd_,
-               message,
-               int(strlen(message)),
-               0,
-               pair.second->ai_addr,
-               int(pair.second->ai_addrlen)) == -1)
+  for (const auto &value : them_addrss_.values()) {
+    if (sendto(
+            sockfd_, message, int(strlen(message)), 0, value->ai_addr, int(value->ai_addrlen)) ==
+        -1)
     {
       char error_buffer[256];
       sprintf_s(error_buffer,
@@ -91,7 +88,7 @@ void Dance::MU_host(Dance::dance_moves moves,
                     int _max_connections,
                     const char *port,
                     bool _force_IPV4,
-                    const std::vector<std::string> &clients_IP)
+                    const blender::Vector<std::string> &clients_IP)
 {
 
   /* -------------------------------------------------------------------- */
@@ -136,10 +133,7 @@ void Dance::MU_host(Dance::dance_moves moves,
     ipv_ = AF_INET;
   }
   else {
-    bool p = false;
-    if (moves == PUBLIC) {
-      p = true;
-    }
+    const bool p = moves == PUBLIC ? true : false;
     strcpy_s(own_IP, MU_get_IP(p).c_str()); /* Set own_IP using MU_get_IP(). */
   }
 
@@ -190,8 +184,8 @@ void Dance::MU_host(Dance::dance_moves moves,
                   0);
 
       /* Add host to map. */
-      them_addrss_.emplace(std::make_pair(info_host, res));
-      them_numbers_.emplace(std::make_pair(info_host, 0));
+      them_addrss_.add(info_host, res);
+      them_numbers_.add(info_host, 0);
       /* Don't Increase total connections (We do this after we confirmed the connection in
        * holepunching). */
       /* total_connections_++; */
@@ -403,8 +397,8 @@ bool Dance::MU_connect(dance_moves moves, const char *host_IP, const char *port,
 
   /* Add host to map
    */
-  them_addrss_.emplace(std::make_pair("HOST", res));
-  them_numbers_.emplace(std::make_pair("HOST", 0));
+  them_addrss_.add("HOST", res);
+  them_numbers_.add("HOST", 0);
 
   /** \} */
 
@@ -516,8 +510,7 @@ bool Dance::MU_connect(dance_moves moves, const char *host_IP, const char *port,
 
   /* Send a message to the host to connect.
    * message Structure: 'Con' + 'name of the device' */
-  std::string connect_message = "Con";
-  connect_message += name_;
+  std::string connect_message = "Con" + name_;
 
   /* Get address info of the host. */
   if ((status = getaddrinfo(other_IP, host_port_, &hints, &dest)) != 0) {
@@ -635,17 +628,17 @@ void Dance::hole_punch()
   hole_punching_status_ = 1;
 
   /* Generate seed. */
-  uint32_t seed = int(std::chrono::system_clock::now().time_since_epoch().count());
+  const uint32_t seed = int(std::chrono::system_clock::now().time_since_epoch().count());
   /* Use this seed to get random numbers. */
   srand(seed);
 
   /* Create vector of all connections that has to be made. */
-  std::vector<struct addrinfo *> future_connections;
+  blender::Vector<struct addrinfo *> future_connections;
 
   {
-    std::map<std::string, struct addrinfo *>::iterator it;
-    for (it = them_addrss_.begin(); it != them_addrss_.end(); it++)
-      future_connections.push_back(it->second);
+    for (const auto &value : them_addrss_.values()) {
+      future_connections.append(value);
+    }
   }
 
   /* While-loop until everyone is connected. */
@@ -664,8 +657,7 @@ void Dance::hole_punch()
       }
 
       /* Sending message. */
-      std::string hole_punch_message = "HolePunch";
-      hole_punch_message = "Con " + name_ + ": " + hole_punch_message;
+      const std::string hole_punch_message = "Con " + name_ + ": HolePunch";
 
       /* If there was a succefull connection on the first iteration, it will finish the other 9
        * before realizing. */
@@ -702,7 +694,7 @@ void Dance::hole_punch()
                    hole_punch_confirmed_connections_[i]->ai_addrlen) == 0)
         {
           /* remove from futureconnections. */
-          future_connections.erase(future_connections.begin() + j);
+          future_connections.remove(j);
         }
       }
     }
@@ -729,14 +721,14 @@ void Dance::MU_keep_alive(float dt)
 
       const char *message = "KeepAliveMessage";
       /* Send message all other connections. */
-      for (const auto &pair : them_addrss_) {
+      for (const auto &value : them_addrss_.values()) {
         /* Send the message. */
         if (sendto(sockfd_,
                    message,
                    int(strlen(message)),
                    0,
-                   pair.second->ai_addr,
-                   int(pair.second->ai_addrlen)) == -1)
+                   value->ai_addr,
+                   int(value->ai_addrlen)) == -1)
         {
           char error_buffer[256];
           sprintf_s(error_buffer,
@@ -755,14 +747,14 @@ void Dance::MU_keep_alive(float dt)
 
       const char *message = "KeepAliveMessage";
       /* Send message to every connection. */
-      for (const auto &pair : them_addrss_) {
+      for (const auto &value : them_addrss_.values()) {
         /* Send the message. */
         if (sendto(sockfd_,
                    message,
                    int(strlen(message)),
                    0,
-                   pair.second->ai_addr,
-                   int(pair.second->ai_addrlen)) == -1)
+                   value->ai_addr,
+                   int(value->ai_addrlen)) == -1)
         {
           char error_buffer[256];
           sprintf_s(error_buffer,
@@ -822,7 +814,7 @@ void Dance::MU_get_package(std::string package_name,
                          tmp,
                          types), /* #MU_try_parse tries to parse each empty type, #parsed will be
                                     true or false, types will be filled with input if succeeded. */
-                     parsed ? (r_package_info->variable_vector.push_back(types), true) :
+                     parsed ? (r_package_info->variable_vector.append(types), true) :
                               false)); /* If parsed, push back the type and return true, else
                                           return false. */
                  },
@@ -830,7 +822,7 @@ void Dance::MU_get_package(std::string package_name,
                                                                                     be tested. */
       if (!parsed) {
         /* Just insert the string. */
-        r_package_info->variable_vector.push_back(tmp);
+        r_package_info->variable_vector.append(tmp);
         /* Let know that not all variables succeeded to parse */
         r_package_info->succeeded = false;
       }
@@ -892,12 +884,18 @@ bool Dance::listen(bool keep_checking)
 
   quit_listening_ = false;
   while (!quit_listening_) {
+
     socklen_t addr_size = sizeof(sockaddr_storage);
-    int buffer_len = recvfrom(
-        sockfd_, (char *)buffer, sizeof(buffer), 0, (struct sockaddr *)&them_addr, &addr_size);
+    const int buffer_len = recvfrom(sockfd_,
+                                    static_cast<char *>(buffer),
+                                    sizeof(buffer),
+                                    0,
+                                    reinterpret_cast<struct sockaddr *>(&them_addr),
+                                    &addr_size);
+
     if (buffer_len < 0) {
       /* Highly likely that the connection was reset by peer, if not, check it out! */
-      bool removed_peer = handle_disconnection(them_addr, addr_size);
+      const bool removed_peer = handle_disconnection(them_addr, addr_size);
 
       if (removed_peer && !is_host_) { /* TODO: what if Public connection? */
         quit_listening_ = true;
@@ -955,15 +953,16 @@ bool Dance::listen(bool keep_checking)
 
       /* Check if it is an important message. */
       if (std::strncmp(buffer, "Imp", 3) == 0) {
+
         /* Remove 'Imp ' from the buffer. */
         memcpy_s(buffer, sizeof(buffer), &buffer[3], sizeof(buffer) - 3);
-        std::string buf(buffer);
-        std::string ID = std::string(get_word(buf, 0));
+        const std::string buf(buffer);
+        const std::string ID = std::string(get_word(buf, 0));
         /* Remove ID from buffer. */
         memcpy_s(
             buffer, sizeof(buffer), &buffer[ID.length() + 1], sizeof(buffer) - (ID.length() + 1));
         /* Send back that it succeeded. */
-        addrinfo *res = storage_to_addr_info(them_addr, addr_size);
+        const addrinfo *res = storage_to_addr_info(them_addr, addr_size);
         const std::string return_message = "SImp" + ID; /* Succes Important. */
         if (sendto(sockfd_,
                    return_message.c_str(),
@@ -986,12 +985,12 @@ bool Dance::listen(bool keep_checking)
         /* Remove 'SImp' from the buffer. */
         memcpy_s(buffer, sizeof(buffer), &buffer[4], sizeof(buffer) - 4);
         /* Remove from array. */
-        important_send_messages_.erase(atoi(buffer));
+        important_send_messages_.remove(atoi(buffer));
         continue;
       }
 
       /* Check on the other important messages in array. */
-      if (!important_send_messages_.empty()) {
+      if (!important_send_messages_.is_empty()) {
         const uint64_t ms = static_cast<uint64_t>(
             std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::system_clock::now().time_since_epoch())
@@ -1004,39 +1003,43 @@ bool Dance::listen(bool keep_checking)
         if (time_checked_imp_ > 0.1f) {
           time_checked_imp_ = 0.0f;
 
-          for (auto &it : important_send_messages_) {
-            if (it.second.checks_done >= 5) {
+          for (auto &value : important_send_messages_.values()) {
+            if (value.checks_done >= 5) {
+
               /* Probably do something */
               char error_buffer[256];
               sprintf_s(error_buffer,
                         sizeof(error_buffer),
                         "Never received important message confirmation from message: %s",
-                        it.second.message.c_str());
+                        value.message.c_str());
               /*LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, error_buffer); */
             }
             else /* Send again. */ {
+
               /* Get user_ID. */
-              int userID = static_cast<int>(
-                  static_cast<float>(it.second.ID) /
-                  std::powf(10.0f, std::floorf(std::log10(static_cast<float>(it.second.ID)))));
+              const int userID = static_cast<int>(
+                  static_cast<float>(value.ID) /
+                  std::powf(10.0f, std::floorf(std::log10(static_cast<float>(value.ID)))));
+
               /* TODO: is user_ID correct? */
               char error_buffer[256];
               sprintf_s(error_buffer,
                         sizeof(error_buffer),
                         "Needed to send this important message a second time: %s",
-                        it.second.message.c_str());
+                        value.message.c_str());
               /*LOGLINE(DLogObj, DanceLogger::DANCE_WARNING, error_buffer); */
-              const std::string imp_return_message =
-                  "Imp" + std::to_string(it.second.ID) + " " +
-                  it.second.message; /* SImp = Succes Important. */
-              for (const auto &pair : them_addrss_) {
-                if (them_numbers_.at(pair.first) == userID) { /* Send to this user. */
+
+              const std::string imp_return_message = "Imp" + std::to_string(value.ID) + " " +
+                                                     value.message; /* SImp = Succes Important. */
+
+              for (const auto &item : them_addrss_.items()) {
+                if (them_numbers_.lookup(item.key) == userID) { /* Send to this user. */
                   if (sendto(sockfd_,
                              imp_return_message.c_str(),
                              int(strlen(imp_return_message.c_str())),
                              0,
-                             pair.second->ai_addr,
-                             int(pair.second->ai_addrlen)) == -1)
+                             item.value->ai_addr,
+                             int(item.value->ai_addrlen)) == -1)
                   {
                     char error_buffer[256];
                     sprintf_s(error_buffer,
@@ -1048,7 +1051,7 @@ bool Dance::listen(bool keep_checking)
                 }
               }
 
-              it.second.checks_done++;
+              value.checks_done++;
             }
           }
         }
@@ -1103,7 +1106,7 @@ bool Dance::listen(bool keep_checking)
         /* Check for certainty if it really is this message. */
         if (std::strncmp(buffer, "TotalConCount", 13) == 0) {
           /* Update total connection count. */
-          std::string buf(buffer);
+          const std::string buf(buffer);
           total_connections_ = std::stoi(get_word(buf, 1).data());
           continue;
         }
@@ -1126,7 +1129,7 @@ bool Dance::listen(bool keep_checking)
             ID += std::to_string(buffer[7]);
             extra++;
           }
-          std::string message = &buffer[8 + extra];
+          const std::string message = &buffer[8 + extra];
           MU_send_message_to(message, std::stoi(ID), 0, false);
           continue; /* We dont want to do anything with this message so move on. */
         }
@@ -1135,17 +1138,17 @@ bool Dance::listen(bool keep_checking)
           /* Fill in the name. */
           memcpy_s(buffer, sizeof(buffer), &buffer[7], sizeof(buffer) - 7);
           int i = 0;
-          while (buffer[i] != ':')
+          while (buffer[i] != ':') {
             other_name += buffer[i++];
+          }
         }
         /* Send to all, including this program but not to the sender. */
         else if (std::strncmp(buffer, "-ToAll", 6) == 0) {
-          std::string message = &buffer[7];
+          const std::string message = &buffer[7];
 
-          std::map<std::string, int>::iterator it;
-          for (it = them_numbers_.begin(); it != them_numbers_.end(); it++) {
-            if (it->second != 0) { /* Don't send to host (ourself). */
-              MU_send_message_to(message, it->second, 0, false);
+          for (const auto &value : them_numbers_.values()) {
+            if (value != 0) { /* Don't send to host (ourself). */
+              MU_send_message_to(message, value, 0, false);
             }
           }
           /* Now handle it ourself. */
@@ -1229,14 +1232,13 @@ bool Dance::listen(bool keep_checking)
 
       /* Now check if we already had this client */
       bool got_them = false;
-      std::map<std::string, struct addrinfo *>::iterator it;
-      for (it = them_addrss_.begin(); it != them_addrss_.end(); it++) {
+      for (const auto &item : them_addrss_.items()) {
         /* Use 2 ways to check, one with the name and otherwise use the #sa_data. */
-        if (it->first == other_name) {
+        if (item.key == other_name) {
           got_them = true;
         }
-        else if (res->ai_addrlen == it->second->ai_addrlen &&
-                 memcmp(res->ai_addr, it->second->ai_addr, res->ai_addrlen) == 0)
+        else if (res->ai_addrlen == item.value->ai_addrlen &&
+                 memcmp(res->ai_addr, item.value->ai_addr, res->ai_addrlen) == 0)
         {
           got_them = true;
         }
@@ -1245,25 +1247,25 @@ bool Dance::listen(bool keep_checking)
         printf("Welcome to the network: %s!\n", other_name.c_str());
 
         /* Add to map. */
-        them_addrss_.emplace(make_pair(other_name, res));
-        them_numbers_.emplace(make_pair(other_name, at_player_number_));
+        them_addrss_.add(other_name, res);
+        them_numbers_.add(other_name, at_player_number_);
         at_player_number_++;
         /* Send message of our new total connections. */
         if (is_host_) {
           total_connections_ = int(them_addrss_.size());
           const char *total_amount_message = "TotalConCount ";
           char connection_amount_message[50];
-          int message_size = snprintf(
+          const int message_size = snprintf(
               connection_amount_message, 50, "%s%i", total_amount_message, total_connections_);
 
           /* Iterate over all the other peers. */
-          for (it = them_addrss_.begin(); it != them_addrss_.end(); it++) {
+          for (const auto &value : them_addrss_.values()) {
             if (sendto(sockfd_,
                        connection_amount_message,
                        message_size,
                        0,
-                       it->second->ai_addr,
-                       int(it->second->ai_addrlen)) == -1)
+                       value->ai_addr,
+                       int(value->ai_addrlen)) == -1)
             {
               char error_buffer[256];
               sprintf_s(error_buffer,
@@ -1297,7 +1299,7 @@ bool Dance::listen(bool keep_checking)
         }
         if (!got_them) {
           total_connections_++;
-          hole_punch_confirmed_connections_.push_back(res);
+          hole_punch_confirmed_connections_.append(res);
         }
       }
     }
@@ -1311,11 +1313,11 @@ void Dance::send_callbacks()
   quit_callback_ = false;
   while (!quit_callback_) {
     while (!user_package_storage_.empty()) {
-      std::string_view package_name = get_word(user_package_storage_.front(), 1);
-      for (auto &callback_function : callback_functions_) {
-        if (callback_function.first == package_name) {
-          callback_function.second(user_package_storage_.front());
-        }
+      const std::string_view package_name = get_word(user_package_storage_.front(), 1);
+      /* Find function belonging to this package name, if it found one, execute it. */
+      const auto function = callback_functions_.lookup_try(package_name.data());
+      if (function) {
+        (*function)(user_package_storage_.front());
       }
       user_package_storage_.pop();
     }
@@ -1359,7 +1361,7 @@ void Dance::add_important_message(std::string &message, const int to_user_ID)
   important_message.ID = static_cast<uint32_t>(to_user_ID * mult) + at_imp_message_++;
   important_message.message = message;
   important_message.checks_done = 0;
-  important_send_messages_.emplace(important_message.ID, important_message);
+  important_send_messages_.add(important_message.ID, important_message);
   message = "Imp" + std::to_string(important_message.ID) + " " + message;
   important_message;
 }
@@ -1369,16 +1371,15 @@ bool Dance::handle_disconnection(sockaddr_storage input, int input_size)
   /* If not the host, a peer has closed the connection, so this peer will be removed. */
   bool disconnected = false;
   /* Check if the user is in the map. */
-  addrinfo *res = storage_to_addr_info(input, input_size);
+  const addrinfo *res = storage_to_addr_info(input, input_size);
 
-  std::map<std::string, struct addrinfo *>::iterator it;
-  for (it = them_addrss_.begin(); it != them_addrss_.end(); it++) {
-    if (memcmp(res->ai_addr, it->second->ai_addr, res->ai_addrlen) == 0) {
+  for (const auto &item : them_addrss_.items()) {
+    if (memcmp(res->ai_addr, item.value->ai_addr, res->ai_addrlen) == 0) {
       /* remove from vector. */
-      printf("Peer %s has disconnected...\n", it->first.c_str());
-      disconnected_user_IDs_.push_back(them_numbers_.at(it->first));
-      them_numbers_.erase(it->first);
-      them_addrss_.erase(it->first);
+      printf("Peer %s has disconnected...\n", item.key.c_str());
+      disconnected_user_IDs_.append(them_numbers_.lookup(item.key));
+      them_numbers_.remove(item.key);
+      them_addrss_.remove(item.key);
       disconnected = true;
 
       /* Update total amount of connections to all peers if host. */
@@ -1386,17 +1387,17 @@ bool Dance::handle_disconnection(sockaddr_storage input, int input_size)
         total_connections_ = int(them_addrss_.size());
         const char *total_amount_message = "TotalConCount ";
         char amount_message[50];
-        int message_size = snprintf(
+        const int message_size = snprintf(
             amount_message, 50, "%s%i", total_amount_message, total_connections_);
 
         /* Iterate over all the other peers. */
-        for (it = them_addrss_.begin(); it != them_addrss_.end(); it++) {
+        for (const auto &value : them_addrss_.values()) {
           if (sendto(sockfd_,
                      amount_message,
                      message_size,
                      0,
-                     it->second->ai_addr,
-                     int(it->second->ai_addrlen)) == -1)
+                     value->ai_addr,
+                     int(value->ai_addrlen)) == -1)
           {
             char error_buffer[256];
             sprintf_s(error_buffer,
@@ -1458,7 +1459,8 @@ std::string_view Dance::get_word(const std::string &input, int word_number)
 std::string Dance::MU_get_IP(bool public_IP)
 {
   if (public_IP) {
-    std::string website_HTLM = get_website(); /* returns #IPV4 or #IPV6, whichever is possible */
+    const std::string website_HTLM =
+        get_website(); /* returns #IPV4 or #IPV6, whichever is possible */
     if (website_HTLM != "0") {
       char OutputIP[65];
       strcpy_s(OutputIP, website_HTLM.c_str()); /* Copy string to IP char. */
@@ -1493,7 +1495,7 @@ std::string Dance::MU_get_IP(bool public_IP)
     if ((return_value = GetAdaptersInfo(pip_adapter_info, &output_buffer_length)) == NO_ERROR) {
       pip_adapter = pip_adapter_info;
       while (pip_adapter) {
-        std::string IP = pip_adapter->IpAddressList.IpAddress.String;
+        const std::string IP = pip_adapter->IpAddressList.IpAddress.String;
 
         if (IP == "0.0.0.0") {
           pip_adapter = pip_adapter->Next;
@@ -1553,12 +1555,10 @@ std::string Dance::get_website()
   SOCKET socket_temp;
   SOCKADDR_IN6 *socket_address_6;
   SOCKADDR_IN *socket_address;
-  std::string get_http;
   std::string website_HTLM;
   char buffer[10000];
   std::string url = "api64.ipify.org";
-
-  get_http = "GET / HTTP/1.1\r\nHost: " + url + "\r\nConnection: close\r\n\r\n";
+  const std::string get_http = "GET / HTTP/1.1\r\nHost: " + url + "\r\nConnection: close\r\n\r\n";
 
   if (WSAStartup(MAKEWORD(2, 2), &wsa_data) != 0) {
     /*LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, "WSASTARTUP failed trying to get the website"); */
@@ -1668,8 +1668,8 @@ void Dance::MU_send_message_to(std::string message, int them_ID, bool to_host, b
 {
   if (is_host_) {
     /* Iterate of numbers. */
-    for (const auto &pair : them_addrss_) {
-      if (them_numbers_.at(pair.first) == them_ID) /* Send to this one. */ {
+    for (const auto &item : them_addrss_.items()) {
+      if (them_numbers_.lookup(item.key) == them_ID) /* Send to this one. */ {
         if (important) {
           add_important_message(message, them_ID);
         }
@@ -1679,8 +1679,8 @@ void Dance::MU_send_message_to(std::string message, int them_ID, bool to_host, b
                    message.c_str(),
                    int(message.size()),
                    0,
-                   pair.second->ai_addr,
-                   int(pair.second->ai_addrlen)) == -1)
+                   item.value->ai_addr,
+                   int(item.value->ai_addrlen)) == -1)
         {
           char error_buffer[256];
           sprintf_s(error_buffer,
@@ -1699,16 +1699,15 @@ void Dance::MU_send_message_to(std::string message, int them_ID, bool to_host, b
   }
   else {           /* not host. */
     if (to_host) { /* Ignore #them_ID, we send this one just to the host. */
-      std::string data_message = "-ToHo ";
-      data_message += message;
+      const std::string data_message = "-ToHo " + message;
 
       /* Send the message to host. */
       if (sendto(sockfd_,
                  data_message.c_str(),
                  int(data_message.size()),
                  0,
-                 them_addrss_.at("HOST")->ai_addr,
-                 int(them_addrss_.at("HOST")->ai_addrlen)) == -1)
+                 them_addrss_.lookup("HOST")->ai_addr,
+                 int(them_addrss_.lookup("HOST")->ai_addrlen)) == -1)
       {
         char error_buffer[256];
         sprintf_s(error_buffer,
@@ -1719,17 +1718,15 @@ void Dance::MU_send_message_to(std::string message, int them_ID, bool to_host, b
       }
     }
     else { /* Send to the host which will send it to the right user. */
-      std::string data_message = "-ToCl-";
-      data_message += std::to_string(them_ID) + " "; /* Add ID. */
-      data_message += message;
+      const std::string data_message = "-ToCl-" + std::to_string(them_ID) + " " + message;
 
       /* Send the message to host. */
       if (sendto(sockfd_,
                  data_message.c_str(),
                  int(data_message.size()),
                  0,
-                 them_addrss_.at("HOST")->ai_addr,
-                 int(them_addrss_.at("HOST")->ai_addrlen)) == -1)
+                 them_addrss_.lookup("HOST")->ai_addr,
+                 int(them_addrss_.lookup("HOST")->ai_addrlen)) == -1)
       {
         char error_buffer[256];
         sprintf_s(error_buffer,
@@ -1745,9 +1742,9 @@ void Dance::MU_send_message_to(std::string message, int them_ID, bool to_host, b
 bool Dance::MU_is_disconnected(const int user_ID, bool remove)
 {
   for (int i = 0; i < disconnected_user_IDs_.size(); i++) {
-    if (user_ID == disconnected_user_IDs_.at(i)) {
+    if (user_ID == disconnected_user_IDs_[i]) {
       if (remove) {
-        disconnected_user_IDs_.erase(disconnected_user_IDs_.begin() + i);
+        disconnected_user_IDs_.remove(i);
       }
       return true;
     }
@@ -1763,12 +1760,11 @@ void Dance::MU_send_package(std::string package_name, bool important)
     MU_prepare_package(package_name.c_str(), data_message);
 
     /* Iterate over all the other peers. */
-    std::map<std::string, struct addrinfo *>::iterator it;
-    for (it = them_addrss_.begin(); it != them_addrss_.end(); it++) {
+    for (const auto &item : them_addrss_.items()) {
       /* TODO: possibly just use a char. */
       std::string data_message_string = data_message;
       if (important) {
-        add_important_message(data_message_string, them_numbers_.at(it->first));
+        add_important_message(data_message_string, them_numbers_.lookup(item.key));
       }
       data_message_string += data_message;
 
@@ -1776,8 +1772,8 @@ void Dance::MU_send_package(std::string package_name, bool important)
                  data_message_string.c_str(),
                  int(strlen(data_message_string.c_str())),
                  0,
-                 it->second->ai_addr,
-                 int(it->second->ai_addrlen)) == -1)
+                 item.value->ai_addr,
+                 int(item.value->ai_addrlen)) == -1)
       {
         char error_buffer[256];
         sprintf_s(error_buffer,
@@ -1796,7 +1792,7 @@ void Dance::MU_send_package(std::string package_name, bool important)
     if (them_addrss_.size() > 0) {
       std::string data_message_string;
       if (important) {
-        add_important_message(data_message_string, them_numbers_.at("HOST"));
+        add_important_message(data_message_string, them_numbers_.lookup("HOST"));
       }
       data_message_string += data_message;
 
@@ -1805,8 +1801,8 @@ void Dance::MU_send_package(std::string package_name, bool important)
                  data_message_string.c_str(),
                  int(strlen(data_message_string.c_str())),
                  0,
-                 them_addrss_.at("HOST")->ai_addr,
-                 int(them_addrss_.at("HOST")->ai_addrlen)) == -1)
+                 them_addrss_.lookup("HOST")->ai_addr,
+                 int(them_addrss_.lookup("HOST")->ai_addrlen)) == -1)
       {
         char error_buffer[256];
         sprintf_s(error_buffer,
@@ -1848,7 +1844,7 @@ void Dance::MU_prepare_package(const char *package_name, char *r_data_message)
   offset += int(std::strlen(package_name));
   r_data_message[offset++] = ' ';
 
-  const auto &package = package_map_[package_name];
+  const auto &package = package_map_.lookup(package_name);
   const int size = int(package.size());
 
   /* Loop over all the data and add it to the message. */
@@ -1908,7 +1904,7 @@ addrinfo *Dance::storage_to_addr_info(sockaddr_storage input, int input_size)
   /* If using the same decive, do not store the info as IP. */
   if (current_moves_ == SAMEDEVICE) {
     /* Malloc memory for #res. */
-    res = (addrinfo *)malloc(sizeof(addrinfo));
+    res = reinterpret_cast<addrinfo *>(malloc(sizeof(addrinfo)));
 
     if (res == NULL) {
       /*LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, "Malloc failed"); */
@@ -1918,7 +1914,7 @@ addrinfo *Dance::storage_to_addr_info(sockaddr_storage input, int input_size)
     res->ai_family = input.ss_family;
     res->ai_socktype = SOCK_DGRAM;
 
-    res->ai_addr = (struct sockaddr *)malloc(input_size);
+    res->ai_addr = reinterpret_cast<struct sockaddr *>(malloc(input_size));
     if (res->ai_addr == NULL) {
       /*LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, "Malloc failed"); */
       return nullptr;
@@ -1932,12 +1928,12 @@ addrinfo *Dance::storage_to_addr_info(sockaddr_storage input, int input_size)
     char address_struct[INET6_ADDRSTRLEN] = {0}; /* This will hold the IP. */
     if (input.ss_family == AF_INET) {            /* #IPV4 */
       /* Get IP of other. */
-      struct sockaddr_in *ipv4 = (struct sockaddr_in *)&input;
+      struct sockaddr_in *ipv4 = reinterpret_cast<struct sockaddr_in *>(&input);
       inet_ntop(AF_INET, &ipv4->sin_addr, address_struct, sizeof(address_struct));
     }
     else { /* #IPV6 */
       /* Get IP of other. */
-      struct sockaddr_in6 *ipv6 = (struct sockaddr_in6 *)&input;
+      struct sockaddr_in6 *ipv6 = reinterpret_cast<struct sockaddr_in6 *>(&input);
       inet_ntop(AF_INET6, &ipv6->sin6_addr, address_struct, sizeof(address_struct));
     }
 
