@@ -8590,16 +8590,17 @@ static void rna_def_multiplayer(BlenderRNA* brna)
   PropertyRNA *prop;
 
   srna = RNA_def_struct(brna, "Multiplayer", nullptr);
-  RNA_def_struct_path_func(srna, "rna_Multiplayer_path");
+  RNA_def_struct_sdna(srna, "Multiplayer");
+  RNA_def_struct_path_func(srna, NULL);
   RNA_def_struct_ui_text(srna, "Multiplayer", "Multiplayer for blender");
 
   prop = RNA_def_property(srna, "port", PROP_INT, PROP_NONE);
-  RNA_def_property_int_sdna(prop, nullptr, "multiplayer_port");
+  RNA_def_property_int_sdna(prop, nullptr, "port");
   RNA_def_property_range(prop, 1, 65535);
   RNA_def_property_ui_text(prop, "Port", "Server port number");
 
-  prop = RNA_def_property(srna, "hostIP", PROP_STRING, PROP_NONE);
-  RNA_def_property_string_sdna(prop, nullptr, "host_IP");
+  prop = RNA_def_property(srna, "host_ip", PROP_STRING, PROP_NONE);
+  RNA_def_property_string_sdna(prop, nullptr, "host_ip");
   RNA_def_property_ui_text(prop, "Host IP", "IP adress of the host");
 
 }
@@ -9165,6 +9166,7 @@ void RNA_def_scene(BlenderRNA *brna)
   rna_def_view_layer_lightgroup(brna);
   rna_def_view_layer_eevee(brna);
   rna_def_scene_gpencil(brna);
+  rna_def_multiplayer(brna);
   RNA_define_animate_sdna(true);
   /* *** Animated *** */
   rna_def_scene_render_data(brna);

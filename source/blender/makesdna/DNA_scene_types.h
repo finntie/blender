@@ -2098,10 +2098,10 @@ enum {
 typedef struct Multiplayer {
   int port;
   short connection_type;
-  char hostIP[256];
+  char host_ip[256];
+  char _pad0[2];
 
-
-};
+} Multiplayer;
 
 /** Type of network that is used */
 enum {
@@ -2243,6 +2243,7 @@ typedef struct Scene {
   struct SceneEEVEE eevee;
   struct SceneGpencil grease_pencil_settings;
   struct SceneHydra hydra;
+  struct Multiplayer multiplayer;
 
   SceneRuntimeHandle *runtime;
 #ifdef __cplusplus

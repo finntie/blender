@@ -236,7 +236,7 @@ class Dance {
      */
     blender::Vector<std::variant<int, float, uint32_t, const char *, std::string, double, bool>>
         input_vector{args...};
-    package_map_.emplace(std::make_pair(package_name, input_vector));
+    package_map_.add(package_name, input_vector);
   }
 
   /**
