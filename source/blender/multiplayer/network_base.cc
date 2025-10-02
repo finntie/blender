@@ -635,10 +635,8 @@ void Dance::hole_punch()
   /* Create vector of all connections that has to be made. */
   blender::Vector<struct addrinfo *> future_connections;
 
-  {
-    for (const auto &value : them_addrss_.values()) {
-      future_connections.append(value);
-    }
+  for (const auto &value : them_addrss_.values()) {
+    future_connections.append(value);
   }
 
   /* While-loop until everyone is connected. */

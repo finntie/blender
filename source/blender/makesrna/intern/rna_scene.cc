@@ -8584,6 +8584,26 @@ static void rna_def_scene_hydra(BlenderRNA *brna)
   RNA_def_property_update(prop, NC_SCENE | ND_RENDER_OPTIONS, nullptr);
 }
 
+static void rna_def_multiplayer(BlenderRNA* brna)
+{
+  StructRNA *srna;
+  PropertyRNA *prop;
+
+  srna = RNA_def_struct(brna, "Multiplayer", nullptr);
+  RNA_def_struct_path_func(srna, "rna_Multiplayer_path");
+  RNA_def_struct_ui_text(srna, "Multiplayer", "Multiplayer for blender");
+
+  prop = RNA_def_property(srna, "port", PROP_INT, PROP_NONE);
+  RNA_def_property_int_sdna(prop, nullptr, "multiplayer_port");
+  RNA_def_property_range(prop, 1, 65535);
+  RNA_def_property_ui_text(prop, "Port", "Server port number");
+
+  prop = RNA_def_property(srna, "hostIP", PROP_STRING, PROP_NONE);
+  RNA_def_property_string_sdna(prop, nullptr, "host_IP");
+  RNA_def_property_ui_text(prop, "Host IP", "IP adress of the host");
+
+}
+
 void RNA_def_scene(BlenderRNA *brna)
 {
   StructRNA *srna;
@@ -9116,6 +9136,11 @@ void RNA_def_scene(BlenderRNA *brna)
   prop = RNA_def_property(srna, "hydra", PROP_POINTER, PROP_NONE);
   RNA_def_property_struct_type(prop, "SceneHydra");
   RNA_def_property_ui_text(prop, "Hydra", "Hydra settings for the scene");
+
+  /* Multiplayer */
+  prop = RNA_def_property(srna, "multiplayer", PROP_POINTER, PROP_NONE);
+  RNA_def_property_struct_type(prop, "Multiplayer");
+  RNA_def_property_ui_text(prop, "Multiplayer", "Multiplayer for blender");
 
   /* Nestled Data. */
   /* *** Non-Animated *** */

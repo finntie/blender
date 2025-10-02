@@ -2092,6 +2092,28 @@ enum {
 /** \} */
 
 /* -------------------------------------------------------------------- */
+/** \name Multiplayer
+ * \{ */
+
+typedef struct Multiplayer {
+  int port;
+  short connection_type;
+  char hostIP[256];
+
+
+};
+
+/** Type of network that is used */
+enum {
+  MU_SAME_DEVICE = 0,
+  MU_LAN = 1,
+  MU_PUBLIC = 3,
+};
+
+/** \} */
+
+
+/* -------------------------------------------------------------------- */
 /** \name Scene ID-Block
  * \{ */
 
