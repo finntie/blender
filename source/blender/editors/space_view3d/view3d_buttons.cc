@@ -71,6 +71,8 @@
 #include "UI_interface_layout.hh"
 #include "UI_resources.hh"
 
+#include "network_buttons.hh"
+
 #include "view3d_intern.hh" /* own include */
 
 /* ******************* view3d space & buttons ************** */
@@ -2558,6 +2560,15 @@ void view3d_buttons_register(ARegionType *art)
   STRNCPY_UTF8(pt->translation_context, BLT_I18NCONTEXT_DEFAULT_BPYRNA);
   pt->draw = view3d_panel_curve_data;
   pt->poll = view3d_panel_curve_data_poll;
+  BLI_addtail(&art->paneltypes, pt);
+
+  /* Multiplayer UI, TODO: possible other location */
+  pt = MEM_callocN<PanelType>("spacetype view3d panel multiplayer");
+  STRNCPY_UTF8(pt->idname, "VIEW3D_PT_multiplayer");
+  STRNCPY_UTF8(pt->label, N_("Multiplayer Settings"));
+  STRNCPY_UTF8(pt->category, "Tools");
+  STRNCPY_UTF8(pt->translation_context, BLT_I18NCONTEXT_DEFAULT_BPYRNA);
+  pt->draw = draw_multiplayer_buttons;
   BLI_addtail(&art->paneltypes, pt);
 }
 

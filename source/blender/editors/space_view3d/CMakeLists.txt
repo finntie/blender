@@ -5,6 +5,7 @@
 set(INC
   ../asset
   ../include
+  ../../multiplayer
   ../../makesrna
   ../../modifiers
   ../../../../intern/mantaflow/extern
@@ -93,6 +94,7 @@ set(LIB
   PRIVATE bf::nodes
   PRIVATE bf::render
   PRIVATE bf::windowmanager
+  bf_multiplayer
 )
 
 if(WITH_PYTHON)
