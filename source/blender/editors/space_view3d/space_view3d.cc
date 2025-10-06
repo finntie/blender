@@ -78,6 +78,7 @@
 
 #include "view3d_intern.hh" /* own include */
 #include "view3d_navigate.hh"
+#include "network_connector.hh"
 
 /* ******************** manage regions ********************* */
 
@@ -652,7 +653,17 @@ static void view3d_main_region_listener(const wmRegionListenerParams *params)
         case ND_BONE_ACTIVE:
         case ND_BONE_SELECT:
         case ND_BONE_COLLECTION:
-        case ND_TRANSFORM:
+        case ND_TRANSFORM: {
+          ViewLayer *view_layer = WM_window_get_active_view_layer(window);
+          if (view_layer) {
+            Object *ob = BKE_view_layer_active_object_get(view_layer);
+            if (ob) {
+              blender::multiplayer::MU_handle_transform(ob);
+            }
+          }
+          ED_region_tag_redraw(region); /* Still draw. */
+          break;
+        }
         case ND_POSE:
         case ND_DRAW:
         case ND_MODIFIER:

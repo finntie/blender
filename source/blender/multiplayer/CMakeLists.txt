@@ -14,6 +14,8 @@ set(INC
   ../compositor/algorithms
   ../compositor/cached_resources
   ../compositor/derived_resources
+  # RNA_prototypes.hh
+  ${CMAKE_BINARY_DIR}/source/blender/makesrna
 )
 
 set(INC_SYS
@@ -52,3 +54,6 @@ if(WITH_UV_SLIM)
 endif()
 
 blender_add_lib(bf_multiplayer "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")
+
+# RNA_prototypes.hh dna_type_offsets.h
+add_dependencies(bf_editor_space_outliner bf_rna)

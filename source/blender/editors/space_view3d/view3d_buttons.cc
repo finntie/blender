@@ -2566,7 +2566,7 @@ void view3d_buttons_register(ARegionType *art)
   pt = MEM_callocN<PanelType>("spacetype view3d panel multiplayer");
   STRNCPY_UTF8(pt->idname, "VIEW3D_PT_multiplayer");
   STRNCPY_UTF8(pt->label, N_("Multiplayer Settings"));
-  STRNCPY_UTF8(pt->category, "Tools");
+  STRNCPY_UTF8(pt->category, "Multiplayer");
   STRNCPY_UTF8(pt->translation_context, BLT_I18NCONTEXT_DEFAULT_BPYRNA);
   pt->draw = draw_multiplayer_buttons;
   BLI_addtail(&art->paneltypes, pt);

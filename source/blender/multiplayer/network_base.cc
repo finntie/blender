@@ -940,7 +940,7 @@ bool Dance::listen(bool keep_checking)
       }
 
       /* Received message. */
-      /* printf("Message received: %s\n", buffer); */
+      printf("Message received: %s\n", buffer);
       bool connecting_message = false;
       std::string other_name{};
       buffer[buffer_len] = '\0'; /* Null terminate the received message. */
