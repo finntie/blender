@@ -45,6 +45,7 @@ class Dance {
   std::string device_name_ = "0";
   char host_port_[5] = "8392";
   bool is_host_ = false;
+  int peer_ID = 0;                           /* Personal ID (0 == host). */
   std::atomic<bool> quit_listening_ = false; /* Will only be set by the main thread exiting */
   std::atomic<bool> quit_callback_ = false;  /* Will only be set by the main thread exiting */
   int hole_punching_status_ = 0;
@@ -179,6 +180,14 @@ class Dance {
     return is_host_;
   }
 
+   /**
+   * What is our number?
+   */
+  int MU_get_player_number()
+  {
+    return peer_ID;
+  }
+
   /**
    * Is IPV4 used? (else, IPV6 is used).
    */
@@ -248,7 +257,7 @@ class Dance {
   template<typename... Args>
   void MU_add_parameters_to_package(std::string package_name, Args... args)
   {
-    package_map_[package_name].insert(package_map_[package_name].end(), {args...});
+    package_map_.lookup(package_name).insert(package_map_.lookup(package_name).end(), {args...});
   }
 
   /**
@@ -262,7 +271,7 @@ class Dance {
   template<typename T>
   void MU_add_data_to_parameter(std::string package_name, int variable_index, T Data)
   {
-    package_map_[package_name][variable_index] = Data;
+    package_map_.lookup(package_name)[variable_index] = Data;
   }
 
   /**
@@ -393,6 +402,15 @@ class Dance {
     return T{};
   }
 
+  /**
+   * Get a word out of a string, returns empty when invalid.
+   *
+   * \param input: Input string.
+   * \param word_number: Word you want to get, starts at 0
+   * \return A string view of the word.
+   */
+  static std::string_view get_word(const std::string &input, int word_number);
+
   /** \} */
 
  private:
@@ -457,15 +475,6 @@ class Dance {
    * Credit: https:/*stackoverflow.com/a/39567361
    */
   std::string get_website();
-
-  /**
-   * Get a word out of a string, returns empty when invalid.
-   *
-   * \param input: Input string.
-   * \param word_number: Word you want to get, starts at 0
-   * \return A string view of the word.
-   */
-  static std::string_view get_word(const std::string &input, int word_number);
 
   /**
    * Convert error code to string

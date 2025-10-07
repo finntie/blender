@@ -940,7 +940,7 @@ bool Dance::listen(bool keep_checking)
       }
 
       /* Received message. */
-      printf("Message received: %s\n", buffer);
+      /*printf("Message received: %s\n", buffer);*/
       bool connecting_message = false;
       std::string other_name{};
       buffer[buffer_len] = '\0'; /* Null terminate the received message. */
@@ -1065,6 +1065,8 @@ bool Dance::listen(bool keep_checking)
       if (std::strncmp(buffer, "Con", 3) == 0) {
         /* If it is a #ConConfirm, and we don't want to keep checking, we can return. */
         if (std::strncmp(buffer, "ConConfirm", 10) == 0) {
+          /* Set our number */
+          sscanf_s(&buffer[10], "%d", &peer_ID);
           if (keep_checking) {
             continue;
           }
@@ -1188,10 +1190,18 @@ bool Dance::listen(bool keep_checking)
       /* Delete oldest message if vector is too big. */
       if (received_messages_.size() > max_size_message_vector_num) {
         char error_buffer[256];
-        sprintf_s(error_buffer,
-                  sizeof(error_buffer),
-                  "Message getting deleted due to buffer being full: %s",
-                  received_messages_.back().c_str());
+        if (received_messages_.back().size() > 200) {
+          sprintf_s(error_buffer,
+                    sizeof(error_buffer),
+                    "Message getting deleted due to buffer being full: %s",
+                    "Could not print message (message was too long)");
+        }
+        else {
+          sprintf_s(error_buffer,
+                    sizeof(error_buffer),
+                    "Message getting deleted due to buffer being full: %s",
+                    received_messages_.back().c_str());
+        }
         /*LOGLINE(DLogObj, DanceLogger::DANCE_INFO, error_buffer); */
         received_messages_.pop_back();
       }
@@ -1210,23 +1220,6 @@ bool Dance::listen(bool keep_checking)
 
       /* Convert from storage to addrinfo. */
       addrinfo *res = storage_to_addr_info(them_addr, addr_size);
-
-      /* Send a confirm that the message reached us succesfully */
-      std::string confirm_message = "ConConfirm";
-      if (sendto(sockfd_,
-                 confirm_message.c_str(),
-                 int(confirm_message.size()),
-                 0,
-                 res->ai_addr,
-                 int(res->ai_addrlen)) == -1)
-      {
-        char error_buffer[256];
-        sprintf_s(error_buffer,
-                  sizeof(error_buffer),
-                  "Send failed: %s",
-                  get_send_errors(WSAGetLastError()));
-        /*LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, error_buffer); */
-      }
 
       /* Now check if we already had this client */
       bool got_them = false;
@@ -1275,6 +1268,24 @@ bool Dance::listen(bool keep_checking)
           }
         }
 
+        /* Send a confirm that the message reached us succesfully, also give them their number */
+        std::string confirm_message = "ConConfirm" + std::to_string(at_player_number_ - 1);
+        if (sendto(sockfd_,
+                   confirm_message.c_str(),
+                   int(confirm_message.size()),
+                   0,
+                   res->ai_addr,
+                   int(res->ai_addrlen)) == -1)
+        {
+          char error_buffer[256];
+          sprintf_s(error_buffer,
+                    sizeof(error_buffer),
+                    "Send failed: %s",
+                    get_send_errors(WSAGetLastError()));
+          /*LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, error_buffer); */
+        }
+
+
         /* Now return if we dont want to keep checking. */
         if (!keep_checking) {
           return true;
@@ -1311,11 +1322,13 @@ void Dance::send_callbacks()
   quit_callback_ = false;
   while (!quit_callback_) {
     while (!user_package_storage_.empty()) {
-      const std::string_view package_name = get_word(user_package_storage_.front(), 1);
+      const std::string package_name = std::string(get_word(user_package_storage_.front(), 1));
       /* Find function belonging to this package name, if it found one, execute it. */
-      const auto function = callback_functions_.lookup_try(package_name.data());
-      if (function) {
-        (*function)(user_package_storage_.front());
+      if (package_name.c_str()) {
+        const auto function = callback_functions_.lookup_try(package_name.c_str());
+        if (function) {
+          (*function)(user_package_storage_.front());
+        }
       }
       user_package_storage_.pop();
     }
@@ -1764,7 +1777,6 @@ void Dance::MU_send_package(std::string package_name, bool important)
       if (important) {
         add_important_message(data_message_string, them_numbers_.lookup(item.key));
       }
-      data_message_string += data_message;
 
       if (sendto(sockfd_,
                  data_message_string.c_str(),
@@ -1788,11 +1800,10 @@ void Dance::MU_send_package(std::string package_name, bool important)
     MU_prepare_package(package_name.c_str(), data_message + strlen(data_message));
 
     if (them_addrss_.size() > 0) {
-      std::string data_message_string;
+      std::string data_message_string = data_message;
       if (important) {
         add_important_message(data_message_string, them_numbers_.lookup("HOST"));
       }
-      data_message_string += data_message;
 
       /* Send the message to host. */
       if (sendto(sockfd_,

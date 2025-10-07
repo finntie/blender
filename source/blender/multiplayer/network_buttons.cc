@@ -37,7 +37,7 @@ void draw_multiplayer_buttons(const bContext *C, Panel *panel)
   }
 
   // Initialize class
-  blender::multiplayer::initialize_network_class();
+  blender::multiplayer::initialize_network_class(C);
 
   Scene *scene = CTX_data_scene(C);
 
