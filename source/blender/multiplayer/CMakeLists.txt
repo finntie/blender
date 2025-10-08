@@ -25,10 +25,12 @@ set(SRC
   network_base.cc
   network_connector.cc
   network_buttons.cc
+  network_scene.cc
 
   network_base.hh
   network_connector.hh
   network_buttons.hh
+  network_scene.hh
 )
 
 set(LIB

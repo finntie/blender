@@ -1,5 +1,6 @@
 #include "network_connector.hh"
 #include "network_base.hh"
+#include "network_scene.hh"
 #include <iostream>
 
 #include "BKE_action.hh"
@@ -9,6 +10,7 @@
 #include "BKE_lib_id.hh"
 #include "BKE_library.hh"
 #include "BKE_main.hh"
+#include "BKE_mesh.hh"
 #include "BKE_screen.hh"
 
 #include "DEG_depsgraph.hh"
@@ -20,6 +22,9 @@
 
 #include "BLI_array.hh"
 #include "BLI_listbase.h"
+
+#include "ED_mesh.hh"
+#include "ED_object.hh"
 
 /* TODO: what is needed? */
 #include "DNA_armature_types.h"
@@ -53,7 +58,7 @@ namespace blender::multiplayer {
 Dance MU_class_object;
 const bContext *CurrentContext;
 
-void printRandomStatement(bContext *, void *, void *poin2)
+void MU_printRandomStatement(bContext *, void *, void *poin2)
 {
   const char *message = static_cast<const char *>(poin2);
   printf("Message containing: %s, will be send:\n", message);
@@ -66,40 +71,45 @@ void printRandomStatement(bContext *, void *, void *poin2)
   }
 }
 
-void initialize_network_class(const bContext *C)
+void MU_initialize_network_class(const bContext *C)
 {
   CurrentContext = C;
 
   MU_class_object.MU_init(true, false);
 
-  // Create packages
+  /* Create packages */
+  /* Contains: loc.x, loc.y, loc.z, rot.x, rot.y, rot.z, scale.x, scale.y, scale.z */
   MU_class_object.MU_create_package(
       "Object_Transform", "name", 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
   MU_class_object.MU_create_package_callback_function("Object_Transform", MU_package_transform);
+
+  /* Create callback for custom message */
+  MU_class_object.MU_create_package_callback_function("Change_Object", MU_package_update_object);
 }
 
-void host_same_device(bContext *, void *, void *)
+void MU_host_same_device(bContext *, void *, void *)
 {
   MU_class_object.MU_host(Dance::SAMEDEVICE, 10);
-  reset_scene();
+  // blender::multiplayer::MU_reset_scene(CurrentContext);
 }
 
-void connect_same_device(bContext *, void *, void *)
+void MU_connect_same_device(bContext *, void *, void *)
 {
-  if (MU_class_object.MU_connect(Dance::SAMEDEVICE, "192.168.0.2")) {
+  if (MU_class_object.MU_connect(Dance::SAMEDEVICE, "192.168.0.0")) {
     // Succeeded
-    reset_scene();
+    // blender::multiplayer::MU_reset_scene(CurrentContext);
   }
 }
 
 void MU_handle_transform(Object *ob)
 {
   if (ob) {
-    Main *bmain = CTX_data_main(CurrentContext);
 
-    if (bmain) {
-      BKE_libblock_rename(*bmain, ob->id, "CubeName");
-    }
+    //Main *bmain = CTX_data_main(CurrentContext);
+
+    //if (bmain) {
+    //  BKE_libblock_rename(*bmain, ob->id, "CubeName");
+    //}
     std::string objectName = ob->id.name;
 
     MU_class_object.MU_add_data_to_parameter<std::string>("Object_Transform", 0, objectName);
@@ -120,28 +130,41 @@ void MU_handle_transform(Object *ob)
   }
 }
 
-void reset_scene()
+void MU_layer_update(Object *ob)
 {
-  Main *bmain = CTX_data_main(CurrentContext);
-  Scene *scene = CTX_data_scene(CurrentContext);
-  ViewLayer *view_layer = CTX_data_view_layer(CurrentContext);
-  BKE_view_layer_synced_ensure(scene, view_layer);
+  if (ob) {
 
-  blender::Vector<Object *> delete_objects;
-  LISTBASE_FOREACH (CollectionObject *, cob, &view_layer->active_collection->collection->gobject) {
-    delete_objects.append(cob->ob);
+    std::string message = MU_object_to_message(ob, "Change_Object");
+
+    /* TODO: do not hardcode towards who. */
+    if (MU_class_object.MU_get_if_host()) {
+      MU_class_object.MU_send_message_to(message, 1, false, true);
+      printf("Send Message: %s\n", message.c_str());
+    }
+    else {
+      MU_class_object.MU_send_message_to(message, 0, true, true);
+    }
+
+    //std::string objectName = ob->id.name;
+    //MU_class_object.MU_add_data_to_parameter<std::string>("Change_Object", 0, objectName);
+    //MU_class_object.MU_add_data_to_parameter<int>("Change_Object", 1, ob->type);
+    //MU_class_object.MU_add_data_to_parameter<float>("Change_Object", 2, ob->loc[0]);
+    //MU_class_object.MU_add_data_to_parameter<float>("Change_Object", 3, ob->loc[1]);
+    //MU_class_object.MU_add_data_to_parameter<float>("Change_Object", 4, ob->loc[2]);
+    //MU_class_object.MU_add_data_to_parameter<float>("Change_Object", 5, ob->rot[0]);
+    //MU_class_object.MU_add_data_to_parameter<float>("Change_Object", 6, ob->rot[1]);
+    //MU_class_object.MU_add_data_to_parameter<float>("Change_Object", 7, ob->rot[2]);
+    //MU_class_object.MU_add_data_to_parameter<float>("Change_Object", 8, ob->scale[0]);
+    //MU_class_object.MU_add_data_to_parameter<float>("Change_Object", 9, ob->scale[1]);
+    //MU_class_object.MU_add_data_to_parameter<float>("Change_Object", 10, ob->scale[2]);
+    //MU_class_object.MU_add_data_to_parameter<int>("Change_Object", 11, MU_get_default_shape(ob));
+
+    //MU_class_object.MU_send_package("Change_Object");
   }
-
-  for (Object *ob : delete_objects) {
-    BKE_id_delete(bmain, ob);
-  }
-
-  WM_event_add_notifier(CurrentContext, NC_SCENE | ND_OB_ACTIVE, scene);
 }
 
 void MU_package_transform(const std::string &buffer)
 {
-  // printf("Received message callback\n");
   /* 0 and 1 are name and client. */
   std::string objectID = std::string(MU_class_object.get_word(buffer, 2));
 
@@ -168,6 +191,54 @@ void MU_package_transform(const std::string &buffer)
       WM_event_add_notifier(CurrentContext, NC_OBJECT | ND_TRANSFORM, ob);
     }
   }
+}
+
+void MU_package_update_object(const std::string &buffer)
+{
+  /* Create object using message */
+  MU_message_to_object(const_cast<bContext *>(CurrentContext), buffer);
+
+  ///* 0 and 1 are name and client. */
+  //std::string objectID = std::string(MU_class_object.get_word(buffer, 2));
+
+  //Main *bmain = CTX_data_main(CurrentContext);
+  //if (bmain) {
+
+  //  float loc[3];
+  //  float rot[3];
+  //  float scale[3];
+
+  //  loc[0] = MU_class_object.MU_data_to_variable<float>(buffer, 4);
+  //  loc[1] = MU_class_object.MU_data_to_variable<float>(buffer, 5);
+  //  loc[2] = MU_class_object.MU_data_to_variable<float>(buffer, 6);
+  //  rot[0] = MU_class_object.MU_data_to_variable<float>(buffer, 7);
+  //  rot[1] = MU_class_object.MU_data_to_variable<float>(buffer, 8);
+  //  rot[2] = MU_class_object.MU_data_to_variable<float>(buffer, 9);
+  //  scale[0] = MU_class_object.MU_data_to_variable<float>(buffer, 10);
+  //  scale[1] = MU_class_object.MU_data_to_variable<float>(buffer, 11);
+  //  scale[2] = MU_class_object.MU_data_to_variable<float>(buffer, 12);
+
+  //  /* Check if object already exists, if so, update it.*/
+  //  Object *ob = reinterpret_cast<Object *>(
+  //      BKE_libblock_find_name(bmain, ID_OB, objectID.c_str() + 2));
+  //  if (ob) {
+  //    ob->loc[0] = loc[0];
+  //    ob->loc[1] = loc[1];
+  //    ob->loc[2] = loc[2];
+  //    ob->rot[0] = rot[0];
+  //    ob->rot[1] = rot[1];
+  //    ob->rot[2] = rot[2];
+  //    ob->scale[0] = scale[0];
+  //    ob->scale[1] = scale[1];
+  //    ob->scale[2] = scale[2];
+  //  }
+  //  else {
+  //    /* Create object */
+  //    int type = MU_class_object.MU_data_to_variable<int>(buffer, 3);
+  //    blender::ed::object::add_type(
+  //        const_cast<bContext *>(CurrentContext), type, objectID.c_str(), loc, rot, false, 0);
+  //  }
+  //}
 }
 
 }  // namespace blender::multiplayer

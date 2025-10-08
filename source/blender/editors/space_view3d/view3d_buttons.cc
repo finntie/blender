@@ -2568,7 +2568,7 @@ void view3d_buttons_register(ARegionType *art)
   STRNCPY_UTF8(pt->label, N_("Multiplayer Settings"));
   STRNCPY_UTF8(pt->category, "Multiplayer");
   STRNCPY_UTF8(pt->translation_context, BLT_I18NCONTEXT_DEFAULT_BPYRNA);
-  pt->draw = draw_multiplayer_buttons;
+  pt->draw = blender::multiplayer::MU_draw_multiplayer_buttons;
   BLI_addtail(&art->paneltypes, pt);
 }
 

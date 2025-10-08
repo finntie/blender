@@ -76,9 +76,9 @@
 #include "DEG_depsgraph.hh"
 #include "DEG_depsgraph_build.hh"
 
+#include "network_connector.hh"
 #include "view3d_intern.hh" /* own include */
 #include "view3d_navigate.hh"
-#include "network_connector.hh"
 
 /* ******************** manage regions ********************* */
 
@@ -606,13 +606,22 @@ static void view3d_main_region_listener(const wmRegionListenerParams *params)
     case NC_SCENE:
       switch (wmn->data) {
         case ND_SCENEBROWSE:
-        case ND_LAYER_CONTENT:
+        case ND_LAYER_CONTENT: {
           ED_region_tag_redraw(region);
           WM_gizmomap_tag_refresh(gzmap);
           if (v3d->localvd && v3d->localvd->runtime.flag & V3D_RUNTIME_LOCAL_MAYBE_EMPTY) {
             ED_area_tag_refresh(area);
           }
+
+          ViewLayer *view_layer = WM_window_get_active_view_layer(window);
+          if (view_layer) {
+            Object *ob = BKE_view_layer_active_object_get(view_layer);
+            if (ob) {
+              blender::multiplayer::MU_layer_update(ob);
+            }
+          }
           break;
+        }
         case ND_LAYER:
           if (wmn->reference) {
             BKE_screen_view3d_sync(v3d, static_cast<Scene *>(wmn->reference));

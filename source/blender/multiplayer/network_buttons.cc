@@ -19,6 +19,8 @@
 #include "network_buttons.hh"
 #include "network_connector.hh"
 
+namespace blender::multiplayer {
+
 struct RestrictProperties {
   bool initialized = false;
 
@@ -26,7 +28,7 @@ struct RestrictProperties {
   PropertyRNA *host_ip_number;
 };
 
-void draw_multiplayer_buttons(const bContext *C, Panel *panel)
+void MU_draw_multiplayer_buttons(const bContext *C, Panel *panel)
 {
   /* Get RNA properties (once for speed). Got from #outliner_draw.cc. */
   static RestrictProperties props = {false};
@@ -37,7 +39,7 @@ void draw_multiplayer_buttons(const bContext *C, Panel *panel)
   }
 
   // Initialize class
-  blender::multiplayer::initialize_network_class(C);
+  blender::multiplayer::MU_initialize_network_class(C);
 
   Scene *scene = CTX_data_scene(C);
 
@@ -48,12 +50,13 @@ void draw_multiplayer_buttons(const bContext *C, Panel *panel)
 
   bt = uiDefBut(block, ButType::But, 0, IFACE_("Host"), 20, 130, 60, 20, nullptr, 0, 0, "");
 
-  UI_but_func_set(bt, blender::multiplayer::host_same_device, (void *)"Random button!", nullptr);
+  UI_but_func_set(
+      bt, blender::multiplayer::MU_host_same_device, (void *)"Random button!", nullptr);
 
   bt = uiDefBut(block, ButType::But, 0, IFACE_("Connect"), 20, 130, 60, 20, nullptr, 0, 0, "");
 
   UI_but_func_set(
-      bt, blender::multiplayer::connect_same_device, (void *)"Random button!", nullptr);
+      bt, blender::multiplayer::MU_connect_same_device, (void *)"Random button!", nullptr);
 
   PointerRNA ptr = RNA_id_pointer_create(&scene->id);
   Multiplayer *mp = &scene->multiplayer;
@@ -64,21 +67,23 @@ void draw_multiplayer_buttons(const bContext *C, Panel *panel)
   }
 
   bt = uiDefButR_prop(block,
-                          ButType::Text,
-                          0,
-                          IFACE_(""),
-                          100,
-                          200,
-                          UI_UNIT_X,
-                          UI_UNIT_Y,
-                          &mu_ptr,
-                          props.host_ip_number,
-                          -1,
-                          0,
-                          0,
-                          TIP_("Set port number of connection\n"
-                               " \u2022 Second line"));
-  
+                      ButType::Text,
+                      0,
+                      IFACE_(""),
+                      100,
+                      200,
+                      UI_UNIT_X,
+                      UI_UNIT_Y,
+                      &mu_ptr,
+                      props.host_ip_number,
+                      -1,
+                      0,
+                      0,
+                      TIP_("Set port number of connection\n"
+                           " \u2022 Second line"));
+
   UI_but_func_set(
-      bt, blender::multiplayer::printRandomStatement, (void *)"Port number!", mp->host_ip);
+      bt, blender::multiplayer::MU_printRandomStatement, (void *)"Port number!", mp->host_ip);
 }
+
+}  // namespace blender::multiplayer

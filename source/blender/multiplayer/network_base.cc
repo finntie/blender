@@ -940,7 +940,7 @@ bool Dance::listen(bool keep_checking)
       }
 
       /* Received message. */
-      /*printf("Message received: %s\n", buffer);*/
+      printf("Message received: %s\n", buffer);
       bool connecting_message = false;
       std::string other_name{};
       buffer[buffer_len] = '\0'; /* Null terminate the received message. */
@@ -1328,6 +1328,9 @@ void Dance::send_callbacks()
         const auto function = callback_functions_.lookup_try(package_name.c_str());
         if (function) {
           (*function)(user_package_storage_.front());
+        }
+        else {
+          printf("function not found\n");
         }
       }
       user_package_storage_.pop();
