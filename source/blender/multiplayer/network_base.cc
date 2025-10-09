@@ -26,17 +26,7 @@ Dance::~Dance()
   /* If still connections, tell that we disconnected. */
   const char *message = "Disconnect";
   for (const auto &value : them_addrss_.values()) {
-    if (sendto(
-            sockfd_, message, int(strlen(message)), 0, value->ai_addr, int(value->ai_addrlen)) ==
-        -1)
-    {
-      char error_buffer[256];
-      sprintf_s(error_buffer,
-                sizeof(error_buffer),
-                "Send failed %s",
-                get_send_errors(WSAGetLastError()));
-      /*LOGLINE(DLogObj, DanceLogger::DANCE_WARNING, error_buffer); */
-    }
+    send_message(message, int(strlen(message)), value, false, nullptr);
   }
 
   /* Close socket so that recvfrom() will end. */
@@ -662,20 +652,11 @@ void Dance::hole_punch()
       for (int j = 0; j < 10; j++) {
         /* Iterate over all the other peers */
         for (int i = 0; i < int(future_connections.size()); i++) {
-          if (sendto(sockfd_,
-                     hole_punch_message.c_str(),
-                     int(hole_punch_message.size()),
-                     0,
-                     future_connections[i]->ai_addr,
-                     int(future_connections[i]->ai_addrlen)) == -1)
-          {
-            char error_buffer[256];
-            sprintf_s(error_buffer,
-                      sizeof(error_buffer),
-                      "Send failed: %s",
-                      get_send_errors(WSAGetLastError()));
-            /*LOGLINE(DLogObj, DanceLogger::DANCE_WARNING, error_buffer); */
-          }
+          send_message(hole_punch_message.c_str(),
+                       int(hole_punch_message.size()),
+                       future_connections[i],
+                       false,
+                       nullptr);
         }
         /* Sleep for between 0.09 and 0.11 seconds. */
         Sleep(rand() % 2 + 9);
@@ -720,21 +701,7 @@ void Dance::MU_keep_alive(float dt)
       const char *message = "KeepAliveMessage";
       /* Send message all other connections. */
       for (const auto &value : them_addrss_.values()) {
-        /* Send the message. */
-        if (sendto(sockfd_,
-                   message,
-                   int(strlen(message)),
-                   0,
-                   value->ai_addr,
-                   int(value->ai_addrlen)) == -1)
-        {
-          char error_buffer[256];
-          sprintf_s(error_buffer,
-                    sizeof(error_buffer),
-                    "Send failed: %s",
-                    get_send_errors(WSAGetLastError()));
-          /*LOGLINE(DLogObj, DanceLogger::DANCE_WARNING, error_buffer); */
-        }
+        send_message(message, int(strlen(message)), value, false, nullptr);
       }
     }
   }
@@ -746,21 +713,7 @@ void Dance::MU_keep_alive(float dt)
       const char *message = "KeepAliveMessage";
       /* Send message to every connection. */
       for (const auto &value : them_addrss_.values()) {
-        /* Send the message. */
-        if (sendto(sockfd_,
-                   message,
-                   int(strlen(message)),
-                   0,
-                   value->ai_addr,
-                   int(value->ai_addrlen)) == -1)
-        {
-          char error_buffer[256];
-          sprintf_s(error_buffer,
-                    sizeof(error_buffer),
-                    "Send failed: %s",
-                    get_send_errors(WSAGetLastError()));
-          /*LOGLINE(DLogObj, DanceLogger::DANCE_WARNING, error_buffer); */
-        }
+        send_message(message, int(strlen(message)), value, false, nullptr);
       }
     }
   }
@@ -845,10 +798,9 @@ bool Dance::listen(bool keep_checking)
 {
   const int max_size_message_vector_num = 100;
   struct sockaddr_storage them_addr{}; /* Adress of the others. */
-  char buffer[MAXPACKAGESIZE]{};
 
   /* Up the writing size and reading size. */
-  int send_buffer_size = 2 * 1024;     /* 2 KB send buffer size. */
+  int send_buffer_size = 16 * 1024;    /* 16 KB send buffer size. */
   int receive_buffer_size = 32 * 1024; /* 32 KB receive buffer size */
   if (setsockopt(
           sockfd_, SOL_SOCKET, SO_SNDBUF, (char *)&send_buffer_size, sizeof(send_buffer_size)) < 0)
@@ -885,27 +837,28 @@ bool Dance::listen(bool keep_checking)
 
     socklen_t addr_size = sizeof(sockaddr_storage);
     const int buffer_len = recvfrom(sockfd_,
-                                    static_cast<char *>(buffer),
-                                    sizeof(buffer),
+                                    static_cast<char *>(listen_buffer),
+                                    sizeof(listen_buffer),
                                     0,
                                     reinterpret_cast<struct sockaddr *>(&them_addr),
                                     &addr_size);
 
     if (buffer_len < 0) {
       /* Highly likely that the connection was reset by peer, if not, check it out! */
-      const bool removed_peer = handle_disconnection(them_addr, addr_size);
+      // const bool removed_peer = handle_disconnection(them_addr, addr_size);
 
-      if (removed_peer && !is_host_) { /* TODO: what if Public connection? */
-        quit_listening_ = true;
-        listen_thread_.detach();
-        return false;
-      }
-      if (!removed_peer) {
+      // if (removed_peer && !is_host_) { /* TODO: what if Public connection? */
+      //   quit_listening_ = true;
+      //   listen_thread_.detach();
+      //   return false;
+      // }
+      if (true) {
         char error_buffer[256];
         sprintf_s(error_buffer,
                   sizeof(error_buffer),
                   "Error receiving message: %s",
                   get_send_errors(WSAGetLastError()));
+        printf(get_send_errors(WSAGetLastError()));
         /*LOGLINE(DLogObj, DanceLogger::DANCE_INFO, error_buffer); */
       }
     }
@@ -940,50 +893,105 @@ bool Dance::listen(bool keep_checking)
       }
 
       /* Received message. */
-      printf("Message received: %s\n", buffer);
+      printf("Message received: %s\n", listen_buffer);
       bool connecting_message = false;
       std::string other_name{};
-      buffer[buffer_len] = '\0'; /* Null terminate the received message. */
+      listen_buffer[buffer_len] = '\0'; /* Null terminate the received message. */
 
       /* -------------------------------------------------------------------- */
       /** \Important Message?
        * \{ */
 
       /* Check if it is an important message. */
-      if (std::strncmp(buffer, "Imp", 3) == 0) {
+      if (std::strncmp(listen_buffer, "Imp", 3) == 0) {
 
         /* Remove 'Imp ' from the buffer. */
-        memcpy_s(buffer, sizeof(buffer), &buffer[3], sizeof(buffer) - 3);
-        const std::string buf(buffer);
+        memcpy_s(
+            listen_buffer, sizeof(listen_buffer), &listen_buffer[3], sizeof(listen_buffer) - 3);
+        const std::string buf(listen_buffer);
         const std::string ID = std::string(get_word(buf, 0));
         /* Remove ID from buffer. */
-        memcpy_s(
-            buffer, sizeof(buffer), &buffer[ID.length() + 1], sizeof(buffer) - (ID.length() + 1));
+        memcpy_s(listen_buffer,
+                 sizeof(listen_buffer),
+                 &listen_buffer[ID.length() + 1],
+                 sizeof(listen_buffer) - (ID.length() + 1));
+
+        bool long_full = true;
+        /* Check if it is a long message */
+        if (std::strncmp(listen_buffer, "Long", 4) == 0) {
+          /* Remove 'Long' from the buffer. */
+          memcpy_s(
+              listen_buffer, sizeof(listen_buffer), &listen_buffer[4], sizeof(listen_buffer) - 4);
+          /* Find numbers */
+          std::string num_1;
+          int num_2, idx_last;
+          std::string number_finder(listen_buffer);
+          number_finder = number_finder.substr(0, number_finder.find('/'));
+          num_1 = number_finder;
+          number_finder = listen_buffer;
+          number_finder = number_finder.substr(number_finder.find('/') + 1,
+                                               idx_last = number_finder.find(' '));
+          num_2 = std::stoi(number_finder);
+          idx_last++;
+          /* Remove numbers from the buffer. */
+          memcpy_s(listen_buffer,
+                   sizeof(listen_buffer),
+                   &listen_buffer[idx_last],
+                   sizeof(listen_buffer) - idx_last);
+
+          /* Add value to map */
+          blender::Map<std::string, std::string> batch_map;
+          auto &batch_map_ret = long_message_storage_.lookup_or_add(ID, batch_map);
+          std::string *value_ptr = batch_map_ret.lookup_ptr(num_1);
+          if (value_ptr) {
+            batch_map_ret.add(num_1, listen_buffer);
+          }
+
+          /* Check if we got all. */
+          if (batch_map_ret.size() < num_2) {
+            long_full = false;
+          }
+          else {
+            std::string fullMessage;
+            fullMessage.reserve(num_2 * 1024);
+            for (int i = 0; i < batch_map_ret.size(); i++) {
+              std::string *batch_message = batch_map_ret.lookup_ptr(std::to_string(i));
+              if (batch_message) {
+                fullMessage += *batch_message;
+              }
+              else {
+                /* Something went wrong, full message is not complete. */
+                long_full = false;
+                // const char *error_buffer =
+                //     "Not all batch messages were complete trying to recreate full message";
+                /*LOGLINE(DLogObj, DanceLogger::DANCE_MESSAGE, error_buffer); */
+                break;
+              }
+            }
+            if (long_full) {
+              long_message_storage_.remove(ID);
+            }
+          }
+        }
+
         /* Send back that it succeeded. */
-        const addrinfo *res = storage_to_addr_info(them_addr, addr_size);
+        addrinfo *res = storage_to_addr_info(them_addr, addr_size);
         const std::string return_message = "SImp" + ID; /* Succes Important. */
-        if (sendto(sockfd_,
-                   return_message.c_str(),
-                   int(strlen(return_message.c_str())),
-                   0,
-                   res->ai_addr,
-                   int(res->ai_addrlen)) == -1)
-        {
-          char error_buffer[256];
-          sprintf_s(error_buffer,
-                    sizeof(error_buffer),
-                    "Send failed: %s",
-                    get_send_errors(WSAGetLastError()));
-          /*LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, error_buffer); */
+        send_message(return_message.c_str(), int(return_message.size()), res, false, nullptr);
+
+        /* We do not want to handle batch messages seperately */
+        if (!long_full) {
+          continue;
         }
       }
 
       /* Check if it is a succes important message. */
-      if (std::strncmp(buffer, "SImp", 4) == 0) {
+      if (std::strncmp(listen_buffer, "SImp", 4) == 0) {
         /* Remove 'SImp' from the buffer. */
-        memcpy_s(buffer, sizeof(buffer), &buffer[4], sizeof(buffer) - 4);
+        memcpy_s(
+            listen_buffer, sizeof(listen_buffer), &listen_buffer[4], sizeof(listen_buffer) - 4);
         /* Remove from array. */
-        important_send_messages_.remove(atoi(buffer));
+        important_send_messages_.remove(atoi(listen_buffer));
         continue;
       }
 
@@ -1005,12 +1013,19 @@ bool Dance::listen(bool keep_checking)
             if (value.checks_done >= 5) {
 
               /* Probably do something */
-              char error_buffer[256];
-              sprintf_s(error_buffer,
-                        sizeof(error_buffer),
-                        "Never received important message confirmation from message: %s",
-                        value.message.c_str());
-              /*LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, error_buffer); */
+              if (value.message.size() < 200) {
+                char error_buffer[256];
+                sprintf_s(error_buffer,
+                          sizeof(error_buffer),
+                          "Never received important message confirmation from message: %s",
+                          value.message.c_str());
+                /*LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, error_buffer); */
+              }
+              else {
+                /*LOGLINE(DLogObj, DanceLogger::DANCE_WARNING, "Needed to send important message a
+                 * second time"); */
+                printf("Never received important message confirmation from message");
+              }
             }
             else /* Send again. */ {
 
@@ -1020,32 +1035,28 @@ bool Dance::listen(bool keep_checking)
                   std::powf(10.0f, std::floorf(std::log10(static_cast<float>(value.ID)))));
 
               /* TODO: is user_ID correct? */
-              char error_buffer[256];
-              sprintf_s(error_buffer,
-                        sizeof(error_buffer),
-                        "Needed to send this important message a second time: %s",
-                        value.message.c_str());
-              /*LOGLINE(DLogObj, DanceLogger::DANCE_WARNING, error_buffer); */
+              if (value.message.size() < 200) {
+                char error_buffer[256];
+                sprintf_s(error_buffer,
+                          sizeof(error_buffer),
+                          "Needed to send this important message a second time: %s",
+                          value.message.c_str());
+                /*LOGLINE(DLogObj, DanceLogger::DANCE_WARNING, error_buffer); */
+              }
+              else {
+                /*LOGLINE(DLogObj, DanceLogger::DANCE_WARNING, "Needed to send important message a
+                 * second time"); */
+              }
 
               const std::string imp_return_message = "Imp" + std::to_string(value.ID) + " " +
                                                      value.message; /* SImp = Succes Important. */
 
               for (const auto &item : them_addrss_.items()) {
                 if (them_numbers_.lookup(item.key) == userID) { /* Send to this user. */
-                  if (sendto(sockfd_,
-                             imp_return_message.c_str(),
-                             int(strlen(imp_return_message.c_str())),
-                             0,
-                             item.value->ai_addr,
-                             int(item.value->ai_addrlen)) == -1)
-                  {
-                    char error_buffer[256];
-                    sprintf_s(error_buffer,
-                              sizeof(error_buffer),
-                              "Send failed: %s",
-                              get_send_errors(WSAGetLastError()));
-                    /*LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, error_buffer); */
-                  }
+                  send_message(imp_return_message.c_str(),
+                               int(imp_return_message.size()),
+                               item.value, false,
+                               nullptr);
                 }
               }
 
@@ -1062,11 +1073,11 @@ bool Dance::listen(bool keep_checking)
        * \{ */
 
       /* Check if this is a connection message. */
-      if (std::strncmp(buffer, "Con", 3) == 0) {
+      if (std::strncmp(listen_buffer, "Con", 3) == 0) {
         /* If it is a #ConConfirm, and we don't want to keep checking, we can return. */
-        if (std::strncmp(buffer, "ConConfirm", 10) == 0) {
+        if (std::strncmp(listen_buffer, "ConConfirm", 10) == 0) {
           /* Set our number */
-          sscanf_s(&buffer[10], "%d", &peer_ID);
+          sscanf_s(&listen_buffer[10], "%d", &peer_ID);
           if (keep_checking) {
             continue;
           }
@@ -1079,11 +1090,11 @@ bool Dance::listen(bool keep_checking)
           continue;
         }
         connecting_message = true;
-        other_name = &buffer[3]; /* Name starts after the 'Con'. */
+        other_name = &listen_buffer[3]; /* Name starts after the 'Con'. */
       }
 
       /* Check if it is a disconnect message. */
-      else if (std::strncmp(buffer, "Dis", 3) == 0) {
+      else if (std::strncmp(listen_buffer, "Dis", 3) == 0) {
         if (handle_disconnection(them_addr, addr_size)) {
           if (!is_host_) {
             quit_listening_ = true;
@@ -1102,11 +1113,11 @@ bool Dance::listen(bool keep_checking)
        * \{ */
 
       /* Check if this is a message to check how many connections we have (non-host only). */
-      else if (!is_host_ && std::strncmp(buffer, "Tot", 3) == 0) {
+      else if (!is_host_ && std::strncmp(listen_buffer, "Tot", 3) == 0) {
         /* Check for certainty if it really is this message. */
-        if (std::strncmp(buffer, "TotalConCount", 13) == 0) {
+        if (std::strncmp(listen_buffer, "TotalConCount", 13) == 0) {
           /* Update total connection count. */
-          const std::string buf(buffer);
+          const std::string buf(listen_buffer);
           total_connections_ = std::stoi(get_word(buf, 1).data());
           continue;
         }
@@ -1119,53 +1130,56 @@ bool Dance::listen(bool keep_checking)
        * \{ */
 
       /* Check if it is a sendTo message, if so, this program is the host */
-      else if (std::strncmp(buffer, "-To", 3) == 0) {
+      else if (std::strncmp(listen_buffer, "-To", 3) == 0) {
         /* Send to another client */
-        if (std::strncmp(buffer, "-ToCl-", 6) == 0) {
+        if (std::strncmp(listen_buffer, "-ToCl-", 6) == 0) {
           /* Support for 99 users */
           int extra = 0;
-          std::string ID = std::to_string(buffer[6]);
-          if (buffer[7] != ' ') {
-            ID += std::to_string(buffer[7]);
+          std::string ID = std::to_string(listen_buffer[6]);
+          if (listen_buffer[7] != ' ') {
+            ID += std::to_string(listen_buffer[7]);
             extra++;
           }
-          const std::string message = &buffer[8 + extra];
-          MU_send_message_to(message, std::stoi(ID), 0, false);
+          const std::string message = &listen_buffer[8 + extra];
+          MU_send_message_to(message, std::stoi(ID), false, false, false);
           continue; /* We dont want to do anything with this message so move on. */
         }
         /* Handle it like a normal message but remove the first part. */
-        else if (is_host_ && std::strncmp(buffer, "-ToHo", 5) == 0) {
+        else if (is_host_ && std::strncmp(listen_buffer, "-ToHo", 5) == 0) {
           /* Fill in the name. */
-          memcpy_s(buffer, sizeof(buffer), &buffer[7], sizeof(buffer) - 7);
+          memcpy_s(
+              listen_buffer, sizeof(listen_buffer), &listen_buffer[7], sizeof(listen_buffer) - 7);
           int i = 0;
-          while (buffer[i] != ':') {
-            other_name += buffer[i++];
+          while (i < strlen(listen_buffer) && listen_buffer[i] != ':') {
+            other_name += listen_buffer[i++];
           }
         }
         /* Send to all, including this program but not to the sender. */
-        else if (std::strncmp(buffer, "-ToAll", 6) == 0) {
-          const std::string message = &buffer[7];
-
-          for (const auto &value : them_numbers_.values()) {
-            if (value != 0) { /* Don't send to host (ourself). */
-              MU_send_message_to(message, value, 0, false);
+        else if (std::strncmp(listen_buffer, "-ToAll", 6) == 0) {
+          const std::string message = &listen_buffer[7];
+          const addrinfo *res = storage_to_addr_info(them_addr, addr_size);
+          for (const auto &item : them_numbers_.items()) {
+            if (item.value != 0 || res != them_addrss_.lookup(item.key)) {
+              /* Don't send to host (ourself) or the sender.*/
+              MU_send_message_to(message, item.value, false, false, false);
             }
           }
           /* Now handle it ourself. */
 
           /*  Fill in the name. */
-          memcpy_s(buffer, sizeof(buffer), &buffer[7], sizeof(buffer) - 7);
+          memcpy_s(
+              listen_buffer, sizeof(listen_buffer), &listen_buffer[7], sizeof(listen_buffer) - 7);
           int i = 0;
-          while (buffer[i] != ':') {
-            other_name += buffer[i++];
+          while (i < strlen(listen_buffer) && listen_buffer[i] != ':') {
+            other_name += listen_buffer[i++];
           }
         }
       }
 
       if (other_name.empty()) {
         int i = 0;
-        while (i < strlen(buffer) && buffer[i] != ':') {
-          other_name += buffer[i++];
+        while (i < strlen(listen_buffer) && listen_buffer[i] != ':') {
+          other_name += listen_buffer[i++];
         }
       }
 
@@ -1180,13 +1194,13 @@ bool Dance::listen(bool keep_checking)
       /* Store package to queue. */
       if (use_callback_functions_) {
         callback_mutex_.lock();
-        user_package_storage_.push(buffer);
+        user_package_storage_.push(listen_buffer);
         callback_mutex_.unlock();
       }
 
       /* Store message. */
       message_vector_mutex_.lock();
-      received_messages_.push_front(buffer);
+      received_messages_.push_front(listen_buffer);
       /* Delete oldest message if vector is too big. */
       if (received_messages_.size() > max_size_message_vector_num) {
         char error_buffer[256];
@@ -1251,41 +1265,13 @@ bool Dance::listen(bool keep_checking)
 
           /* Iterate over all the other peers. */
           for (const auto &value : them_addrss_.values()) {
-            if (sendto(sockfd_,
-                       connection_amount_message,
-                       message_size,
-                       0,
-                       value->ai_addr,
-                       int(value->ai_addrlen)) == -1)
-            {
-              char error_buffer[256];
-              sprintf_s(error_buffer,
-                        sizeof(error_buffer),
-                        "Send failed: %s",
-                        get_send_errors(WSAGetLastError()));
-              /*LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, error_buffer); */
-            }
+            send_message(connection_amount_message, message_size, value, false, nullptr);
           }
         }
 
         /* Send a confirm that the message reached us succesfully, also give them their number */
         std::string confirm_message = "ConConfirm" + std::to_string(at_player_number_ - 1);
-        if (sendto(sockfd_,
-                   confirm_message.c_str(),
-                   int(confirm_message.size()),
-                   0,
-                   res->ai_addr,
-                   int(res->ai_addrlen)) == -1)
-        {
-          char error_buffer[256];
-          sprintf_s(error_buffer,
-                    sizeof(error_buffer),
-                    "Send failed: %s",
-                    get_send_errors(WSAGetLastError()));
-          /*LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, error_buffer); */
-        }
-
-
+        send_message(confirm_message.c_str(), int(confirm_message.size()), res,false, nullptr);
         /* Now return if we dont want to keep checking. */
         if (!keep_checking) {
           return true;
@@ -1364,20 +1350,123 @@ void Dance::reset_state()
   hole_punch_confirmed_connections_.clear();
 }
 
-void Dance::add_important_message(std::string &message, const int to_user_ID)
+void Dance::send_message(const char *message,
+                         int message_size,
+                         addrinfo *adress,
+                         bool important,
+                         const char *send_error)
+{
+  /* Check if message is too long to send, max is 1024, yet we check for 964 to be able to cut off
+   * a word correctly and add other info */
+  if (message_size > 964) {
+    int amount_messages = int(std::ceil(float(message_size) / 964));
+    int start_index = 0;
+    int at_index = 964;
+
+    /* Find key */
+    int peer_number = -1;
+    for (const auto key : them_addrss_.keys()) {
+      if (memcmp(adress->ai_addr, them_addrss_.lookup(key)->ai_addr, adress->ai_addrlen) == 0) {
+        peer_number = them_numbers_.lookup(key);
+        break;
+      }
+    }
+
+    for (int i = 0; i < amount_messages; i++) {
+
+      char part_message[1024];
+      snprintf(part_message, at_index - start_index, "%s", &message[start_index]);
+
+      /* Add format info */
+      char format_message[64];
+      sprintf_s(format_message, "Long%d/%d ", i, amount_messages - 1);
+      std::string seperate_message = format_message + std::string(part_message);
+
+
+      /* Make important */
+      add_important_message(seperate_message, peer_number);
+
+      /* Send message. */
+      if (sendto(sockfd_,
+                 seperate_message.c_str(),
+                 int(seperate_message.size()),
+                 0,
+                 adress->ai_addr,
+                 adress->ai_addrlen) ==
+          -1)
+      {
+        if (send_error == nullptr || strlen(send_error) < 200) {
+          char error_buffer[256];
+          sprintf_s(error_buffer,
+                    sizeof(error_buffer),
+                    "Send failed: %s",
+                    get_send_errors(WSAGetLastError()));
+        }
+        else {
+          /*LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, send_error); */
+        }
+      }
+
+      start_index = at_index;
+      at_index += 964;
+    }
+  }
+  /* If message is not too long, send it. */
+  else {
+    std::string message_string;
+    if (important) {
+      int peer_number = -1;
+      for (const auto key : them_addrss_.keys()) {
+        if (memcmp(adress->ai_addr, them_addrss_.lookup(key)->ai_addr, adress->ai_addrlen) == 0) {
+          peer_number = them_numbers_.lookup(key);
+        }
+      }
+      add_important_message(message_string, peer_number);
+    }
+    else {
+      message_string = message;
+    }
+
+    if (sendto(sockfd_,
+               message_string.c_str(),
+               int(message_string.size()),
+               0,
+               adress->ai_addr,
+               adress->ai_addrlen) == -1)
+    {
+      if (send_error == nullptr || strlen(send_error) < 200) {
+        char error_buffer[256];
+        sprintf_s(error_buffer,
+                  sizeof(error_buffer),
+                  "Send failed: %s",
+                  get_send_errors(WSAGetLastError()));
+      }
+      else {
+        /*LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, send_error); */
+      }
+    }
+  }
+}
+
+Dance::important_message_struct Dance::add_important_message(std::string &message,
+                                                             const int to_user_ID,
+                                                             uint32_t SetID)
 {
   important_message_struct important_message;
-  /* Create ID based on count and user ID in the front. */
-  float mult = std::pow(100.0f, std::floorf(std::log10(static_cast<float>(at_imp_message_))));
-  if (mult == 0) {
-    mult = 10.0f;
+  if (SetID == 0) {
+    /* Create ID based on count and user ID in the front. */
+    float mult = std::pow(10.0f,
+                          std::floorf(std::log10(static_cast<float>(at_imp_message_ * 10))));
+    important_message.ID = static_cast<uint32_t>(to_user_ID * mult) + at_imp_message_++;
   }
-  important_message.ID = static_cast<uint32_t>(to_user_ID * mult) + at_imp_message_++;
+  else {
+    important_message.ID = SetID;
+  }
   important_message.message = message;
   important_message.checks_done = 0;
   important_send_messages_.add(important_message.ID, important_message);
   message = "Imp" + std::to_string(important_message.ID) + " " + message;
-  important_message;
+  return important_message;
 }
 
 bool Dance::handle_disconnection(sockaddr_storage input, int input_size)
@@ -1406,20 +1495,7 @@ bool Dance::handle_disconnection(sockaddr_storage input, int input_size)
 
         /* Iterate over all the other peers. */
         for (const auto &value : them_addrss_.values()) {
-          if (sendto(sockfd_,
-                     amount_message,
-                     message_size,
-                     0,
-                     value->ai_addr,
-                     int(value->ai_addrlen)) == -1)
-          {
-            char error_buffer[256];
-            sprintf_s(error_buffer,
-                      sizeof(error_buffer),
-                      "Send failed: %s",
-                      get_send_errors(WSAGetLastError()));
-            /*LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, error_buffer); */
-          }
+          send_message(amount_message, message_size, value, false, nullptr);
         }
       }
       else {
@@ -1678,33 +1754,20 @@ std::string Dance::get_website()
 /** \Messages and packages
  * \{ */
 
-void Dance::MU_send_message_to(std::string message, int them_ID, bool to_host, bool important)
+void Dance::MU_send_message_to(
+    std::string message, int them_ID, bool to_host, bool to_all, bool important)
 {
   if (is_host_) {
     /* Iterate of numbers. */
     for (const auto &item : them_addrss_.items()) {
-      if (them_numbers_.lookup(item.key) == them_ID) /* Send to this one. */ {
-        if (important) {
-          add_important_message(message, them_ID);
-        }
+      const int cur_num = them_numbers_.lookup(item.key);
+      if (to_all || cur_num == them_ID) /* Send to this one. */ {
 
         /* Send the message. */
-        if (sendto(sockfd_,
-                   message.c_str(),
-                   int(message.size()),
-                   0,
-                   item.value->ai_addr,
-                   int(item.value->ai_addrlen)) == -1)
-        {
-          char error_buffer[256];
-          sprintf_s(error_buffer,
-                    sizeof(error_buffer),
-                    "Send failed: %s",
-                    get_send_errors(WSAGetLastError()));
-          /*LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, error_buffer); */
-        }
+        send_message(message.c_str(), int(message.size()), item.value, important, nullptr);
         /* Go back. */
-        return;
+        if (!to_all)
+          return;
       }
     }
     /* If here, #them_ID is not available. */
@@ -1714,41 +1777,33 @@ void Dance::MU_send_message_to(std::string message, int them_ID, bool to_host, b
   else {           /* not host. */
     if (to_host) { /* Ignore #them_ID, we send this one just to the host. */
       const std::string data_message = "-ToHo " + message;
+      ;
 
       /* Send the message to host. */
-      if (sendto(sockfd_,
-                 data_message.c_str(),
-                 int(data_message.size()),
-                 0,
-                 them_addrss_.lookup("HOST")->ai_addr,
-                 int(them_addrss_.lookup("HOST")->ai_addrlen)) == -1)
-      {
-        char error_buffer[256];
-        sprintf_s(error_buffer,
-                  sizeof(error_buffer),
-                  "Send failed: %s",
-                  get_send_errors(WSAGetLastError()));
-        /*LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, error_buffer); */
-      }
+      send_message(data_message.c_str(),
+                   int(data_message.size()),
+                   them_addrss_.lookup("HOST"),
+                   important,
+                   nullptr);
     }
-    else { /* Send to the host which will send it to the right user. */
+    else if (to_all) {
+      const std::string data_message = "-ToAll " + message;
+      /* Send the message to host. */
+      send_message(data_message.c_str(),
+                   int(data_message.size()),
+                   them_addrss_.lookup("HOST"),
+                   important,
+                   nullptr);
+    }
+    else { /* Send to the host, which will send it to the right user. */
       const std::string data_message = "-ToCl-" + std::to_string(them_ID) + " " + message;
 
       /* Send the message to host. */
-      if (sendto(sockfd_,
-                 data_message.c_str(),
-                 int(data_message.size()),
-                 0,
-                 them_addrss_.lookup("HOST")->ai_addr,
-                 int(them_addrss_.lookup("HOST")->ai_addrlen)) == -1)
-      {
-        char error_buffer[256];
-        sprintf_s(error_buffer,
-                  sizeof(error_buffer),
-                  "Send failed: %s",
-                  get_send_errors(WSAGetLastError()));
-        /*LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, error_buffer); */
-      }
+      send_message(data_message.c_str(),
+                   int(data_message.size()),
+                   them_addrss_.lookup("HOST"),
+                   important,
+                   nullptr);
     }
   }
 }
@@ -1777,24 +1832,12 @@ void Dance::MU_send_package(std::string package_name, bool important)
     for (const auto &item : them_addrss_.items()) {
       /* TODO: possibly just use a char. */
       std::string data_message_string = data_message;
-      if (important) {
-        add_important_message(data_message_string, them_numbers_.lookup(item.key));
-      }
 
-      if (sendto(sockfd_,
-                 data_message_string.c_str(),
-                 int(strlen(data_message_string.c_str())),
-                 0,
-                 item.value->ai_addr,
-                 int(item.value->ai_addrlen)) == -1)
-      {
-        char error_buffer[256];
-        sprintf_s(error_buffer,
-                  sizeof(error_buffer),
-                  "Send failed: %s",
-                  get_send_errors(WSAGetLastError()));
-        /*LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, error_buffer); */
-      }
+      send_message(data_message_string.c_str(),
+                   int(data_message_string.size()),
+                   item.value,
+                   important,
+                   nullptr);
     }
   }
   else /* not host. */ {
@@ -1804,25 +1847,13 @@ void Dance::MU_send_package(std::string package_name, bool important)
 
     if (them_addrss_.size() > 0) {
       std::string data_message_string = data_message;
-      if (important) {
-        add_important_message(data_message_string, them_numbers_.lookup("HOST"));
-      }
 
       /* Send the message to host. */
-      if (sendto(sockfd_,
-                 data_message_string.c_str(),
-                 int(strlen(data_message_string.c_str())),
-                 0,
-                 them_addrss_.lookup("HOST")->ai_addr,
-                 int(them_addrss_.lookup("HOST")->ai_addrlen)) == -1)
-      {
-        char error_buffer[256];
-        sprintf_s(error_buffer,
-                  sizeof(error_buffer),
-                  "Send failed: %s",
-                  get_send_errors(WSAGetLastError()));
-        /*LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, error_buffer); */
-      }
+      send_message(data_message_string.c_str(),
+                   int(data_message_string.size()),
+                   them_addrss_.lookup("HOST"),
+                   important,
+                   nullptr);
     }
   }
 }
@@ -1831,7 +1862,7 @@ void Dance::MU_send_package_to(std::string package_name, int them_ID, bool to_ho
 {
   char data_message[MAXPACKAGESIZE];
   MU_prepare_package(package_name.c_str(), data_message);
-  MU_send_message_to(data_message, them_ID, to_host, important);
+  MU_send_message_to(data_message, them_ID, to_host, false, important);
 }
 
 void Dance::MU_send_to_self(std::string package_name)

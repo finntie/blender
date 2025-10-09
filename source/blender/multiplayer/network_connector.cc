@@ -63,12 +63,7 @@ void MU_printRandomStatement(bContext *, void *, void *poin2)
   const char *message = static_cast<const char *>(poin2);
   printf("Message containing: %s, will be send:\n", message);
 
-  if (MU_class_object.MU_get_if_host()) {
-    MU_class_object.MU_send_message_to(std::string(message), 1, false, false);
-  }
-  else {
-    MU_class_object.MU_send_message_to(std::string(message), 0, false, false);
-  }
+  MU_class_object.MU_send_message_to(std::string(message), 0, false, true, false);
 }
 
 void MU_initialize_network_class(const bContext *C)
@@ -103,13 +98,13 @@ void MU_connect_same_device(bContext *, void *, void *)
 
 void MU_handle_transform(Object *ob)
 {
-  if (ob) {
+  if (ob && MU_class_object.MU_get_total_connections() > 0) {
 
-    //Main *bmain = CTX_data_main(CurrentContext);
+    // Main *bmain = CTX_data_main(CurrentContext);
 
-    //if (bmain) {
-    //  BKE_libblock_rename(*bmain, ob->id, "CubeName");
-    //}
+    // if (bmain) {
+    //   BKE_libblock_rename(*bmain, ob->id, "CubeName");
+    // }
     std::string objectName = ob->id.name;
 
     MU_class_object.MU_add_data_to_parameter<std::string>("Object_Transform", 0, objectName);
@@ -132,34 +127,11 @@ void MU_handle_transform(Object *ob)
 
 void MU_layer_update(Object *ob)
 {
-  if (ob) {
+  if (ob && MU_class_object.MU_get_total_connections() > 0) {
 
     std::string message = MU_object_to_message(ob, "Change_Object");
 
-    /* TODO: do not hardcode towards who. */
-    if (MU_class_object.MU_get_if_host()) {
-      MU_class_object.MU_send_message_to(message, 1, false, true);
-      printf("Send Message: %s\n", message.c_str());
-    }
-    else {
-      MU_class_object.MU_send_message_to(message, 0, true, true);
-    }
-
-    //std::string objectName = ob->id.name;
-    //MU_class_object.MU_add_data_to_parameter<std::string>("Change_Object", 0, objectName);
-    //MU_class_object.MU_add_data_to_parameter<int>("Change_Object", 1, ob->type);
-    //MU_class_object.MU_add_data_to_parameter<float>("Change_Object", 2, ob->loc[0]);
-    //MU_class_object.MU_add_data_to_parameter<float>("Change_Object", 3, ob->loc[1]);
-    //MU_class_object.MU_add_data_to_parameter<float>("Change_Object", 4, ob->loc[2]);
-    //MU_class_object.MU_add_data_to_parameter<float>("Change_Object", 5, ob->rot[0]);
-    //MU_class_object.MU_add_data_to_parameter<float>("Change_Object", 6, ob->rot[1]);
-    //MU_class_object.MU_add_data_to_parameter<float>("Change_Object", 7, ob->rot[2]);
-    //MU_class_object.MU_add_data_to_parameter<float>("Change_Object", 8, ob->scale[0]);
-    //MU_class_object.MU_add_data_to_parameter<float>("Change_Object", 9, ob->scale[1]);
-    //MU_class_object.MU_add_data_to_parameter<float>("Change_Object", 10, ob->scale[2]);
-    //MU_class_object.MU_add_data_to_parameter<int>("Change_Object", 11, MU_get_default_shape(ob));
-
-    //MU_class_object.MU_send_package("Change_Object");
+    MU_class_object.MU_send_message_to(message, 0, false, true, true);
   }
 }
 
@@ -197,48 +169,6 @@ void MU_package_update_object(const std::string &buffer)
 {
   /* Create object using message */
   MU_message_to_object(const_cast<bContext *>(CurrentContext), buffer);
-
-  ///* 0 and 1 are name and client. */
-  //std::string objectID = std::string(MU_class_object.get_word(buffer, 2));
-
-  //Main *bmain = CTX_data_main(CurrentContext);
-  //if (bmain) {
-
-  //  float loc[3];
-  //  float rot[3];
-  //  float scale[3];
-
-  //  loc[0] = MU_class_object.MU_data_to_variable<float>(buffer, 4);
-  //  loc[1] = MU_class_object.MU_data_to_variable<float>(buffer, 5);
-  //  loc[2] = MU_class_object.MU_data_to_variable<float>(buffer, 6);
-  //  rot[0] = MU_class_object.MU_data_to_variable<float>(buffer, 7);
-  //  rot[1] = MU_class_object.MU_data_to_variable<float>(buffer, 8);
-  //  rot[2] = MU_class_object.MU_data_to_variable<float>(buffer, 9);
-  //  scale[0] = MU_class_object.MU_data_to_variable<float>(buffer, 10);
-  //  scale[1] = MU_class_object.MU_data_to_variable<float>(buffer, 11);
-  //  scale[2] = MU_class_object.MU_data_to_variable<float>(buffer, 12);
-
-  //  /* Check if object already exists, if so, update it.*/
-  //  Object *ob = reinterpret_cast<Object *>(
-  //      BKE_libblock_find_name(bmain, ID_OB, objectID.c_str() + 2));
-  //  if (ob) {
-  //    ob->loc[0] = loc[0];
-  //    ob->loc[1] = loc[1];
-  //    ob->loc[2] = loc[2];
-  //    ob->rot[0] = rot[0];
-  //    ob->rot[1] = rot[1];
-  //    ob->rot[2] = rot[2];
-  //    ob->scale[0] = scale[0];
-  //    ob->scale[1] = scale[1];
-  //    ob->scale[2] = scale[2];
-  //  }
-  //  else {
-  //    /* Create object */
-  //    int type = MU_class_object.MU_data_to_variable<int>(buffer, 3);
-  //    blender::ed::object::add_type(
-  //        const_cast<bContext *>(CurrentContext), type, objectID.c_str(), loc, rot, false, 0);
-  //  }
-  //}
 }
 
 }  // namespace blender::multiplayer

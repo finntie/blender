@@ -96,14 +96,15 @@ int MU_get_default_shape(Object *ob)
   return -1;
 }
 
-std::string MU_object_to_message(Object *ob, const char* package_name)
+std::string MU_object_to_message(Object *ob, const char *package_name)
 {
   std::string message;
   std::stringstream ss;
 
   /* Give package a name. */
   /*TODO: ADD NAME*/
-  ss << "Peer: " << package_name << " " << static_cast<int>(ob->type) << " " << (ob->id.name + 2) << " ";
+  ss << "Peer: " << package_name << " " << static_cast<int>(ob->type) << " " << (ob->id.name + 2)
+     << " ";
 
   /* Check what type it is */
   switch (ob->type) {
@@ -166,6 +167,14 @@ std::string MU_object_to_message(Object *ob, const char* package_name)
 
 void MU_message_to_object(bContext *C, std::string message)
 {
+  Main *bmain = CTX_data_main(C);
+  Scene *scene = CTX_data_scene(C);
+  ViewLayer *view_layer = CTX_data_view_layer(C);
+  if (!bmain || !scene || !view_layer) {
+    printf("Error getting bmain, scene or view_layer in network_scene.cc\n");
+    return;
+  }
+
   std::stringstream ss(message);
 
   /* first 2 values are useless values. */
@@ -180,11 +189,19 @@ void MU_message_to_object(bContext *C, std::string message)
   std::string name;
   ss >> name;
 
+  if (BKE_main_global_namemap_contain_name(*bmain, ID_OB, name)) {
+    printf("Object already has this name\n");
+    return;
+  }
+
   /* Get the counts. */
   int verts_num, edges_num, faces_num, corn_verts_num, corn_edges_num;
   ss >> verts_num >> edges_num >> faces_num >> corn_verts_num >> corn_edges_num;
 
   Mesh *mesh = BKE_mesh_new_nomain(verts_num, edges_num, faces_num, corn_verts_num);
+  
+  BKE_main_global_namemap_get_unique_name(*bmain, mesh->id, mesh->id.name);
+  
 
   blender::MutableSpan<blender::float3> verts = mesh->vert_positions_for_write();
   blender::MutableSpan<blender::int2> edge = mesh->edges_for_write();
@@ -219,33 +236,22 @@ void MU_message_to_object(bContext *C, std::string message)
 
   mesh->tag_positions_changed();
   mesh->tag_topology_changed();
+  mesh->tag_custom_normals_changed();
 
-  Main *bmain = CTX_data_main(C);
-  Scene *scene = CTX_data_scene(C);
-  ViewLayer *view_layer = CTX_data_view_layer(C);
-  if (bmain && scene && view_layer) {
+  BLI_addtail(&bmain->meshes, mesh);
 
-    BLI_addtail(&bmain->meshes, mesh);
-    /* If name already exists, make it unique (could lead to sync problems) */
-    char new_name[64];
-    strcpy_s(new_name, name.c_str());
-    BKE_main_global_namemap_get_unique_name(*bmain, mesh->id, new_name);
+  Object *ob = BKE_object_add_only_object(bmain, type, name.c_str());
+  ob->data = mesh;
+  id_us_plus(&ob->id);
 
-    Object *ob = BKE_object_add_only_object(bmain, type, new_name);
-    ob->data = mesh;
-    id_us_plus(&ob->id);
+  BKE_collection_object_add(bmain, scene->master_collection, ob);
+  BKE_view_layer_synced_ensure(scene, view_layer);
 
-    BKE_collection_object_add(bmain, scene->master_collection, ob);
-    BKE_view_layer_synced_ensure(scene, view_layer);
+  WM_event_add_notifier(C, NC_SCENE | ND_LAYER_CONTENT, scene);
+  DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
+  DEG_relations_tag_update(bmain);
 
-    DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
-    DEG_relations_tag_update(bmain);
-
-    printf("Object made\n");
-  }
-  else {
-    printf("Error getting bmain, scene or view_layer in network_scene.cc\n");
-  }
+  printf("Object made\n");
 }
 
 }  // namespace blender::multiplayer

@@ -18,7 +18,7 @@
 #include "BLI_map.hh"
 #include "BLI_vector.hh"
 
-#define MAXPACKAGESIZE 1024
+#define MAXPACKAGESIZE 1024 * 64
 
 class Dance {
 
@@ -52,11 +52,13 @@ class Dance {
   dance_moves current_moves_ = SAMEDEVICE;
 
   /* Other important information */
+  char listen_buffer[MAXPACKAGESIZE]{};
   float keep_alive_time_ = 60.0f;
   float quick_keep_alive_time_ = 0.5f;
   int max_connections_ = 10; /* Standard is 10 */
   std::deque<std::string> received_messages_{};
   blender::Map<uint32_t, important_message_struct> important_send_messages_{};
+  blender::Map<std::string, blender::Map<std::string, std::string>> long_message_storage_{};
   std::queue<std::string> user_package_storage_{};
   blender::Map<std::string, std::function<void(const std::string &)>> callback_functions_;
   std::future<bool> connection_made_;
@@ -67,7 +69,7 @@ class Dance {
   bool force_IPV4_ = false;
   blender::Vector<int> disconnected_user_IDs_{};
   int at_player_number_ = 1;
-  uint32_t at_imp_message_ = 0;
+  uint32_t at_imp_message_ = 1;
   uint64_t last_time_ = 0;
   float time_checked_imp_ = 0.0f;
 
@@ -160,9 +162,11 @@ class Dance {
    * \param message: Message to be send.
    * \param them_ID: ID to send it to. '0 = host'.
    * \param only_to_host: Send the message to the host? (ignores them_ID).
+   * \param to_all: Send the message to all others.
    * \param important: Treat the message with more care?
    */
-  void MU_send_message_to(std::string message, int them_ID, bool only_to_host, bool important);
+  void MU_send_message_to(
+      std::string message, int them_ID, bool only_to_host, bool to_all, bool important);
 
   /**
    * Get total amount of connections. This does not include ourself.
@@ -180,7 +184,7 @@ class Dance {
     return is_host_;
   }
 
-   /**
+  /**
    * What is our number?
    */
   int MU_get_player_number()
@@ -445,12 +449,30 @@ class Dance {
    * \{ */
 
   /**
+   * Send a message including error and size check
+   *
+   * \param message: Message to be send
+   * \param message_size: Size of this message
+   * \param adress: Adress to whom to send
+   * \param adress_size: Size of this adress
+   * \param send_error: Error to add to send if failed.
+   */
+  void send_message(const char *message,
+                    int message_size,
+                    addrinfo *address_info,
+                    bool important = false,
+                    const char *send_error = nullptr);
+
+  /**
    * Add the important message to the queue
    *
    * \param message: The important message.
    * \param to_user_ID: The user it is going to be send to.
+   * \param SetID: Use this ID instead creating one. Includes userID.
    */
-  void add_important_message(std::string &message, const int to_user_ID);
+  important_message_struct add_important_message(std::string &message,
+                                                 const int to_user_ID,
+                                                 uint32_t SetID = 0);
 
   /**
    * Handle a disconnection from a client or the host
