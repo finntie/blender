@@ -8,6 +8,8 @@
 
 /* Allow using deprecated functionality for .blend file I/O. */
 #define DNA_DEPRECATED_ALLOW
+/* Custom check if transform update. */
+#define NETWORK_UPDATE_TRANSFORM ((void *)0xABBACAAC)
 
 #include <cstring>
 
@@ -663,6 +665,12 @@ static void view3d_main_region_listener(const wmRegionListenerParams *params)
         case ND_BONE_SELECT:
         case ND_BONE_COLLECTION:
         case ND_TRANSFORM: {
+
+          if (wmn->reference == NETWORK_UPDATE_TRANSFORM) {
+            ED_region_tag_redraw(region);
+            break;
+          }
+
           ViewLayer *view_layer = WM_window_get_active_view_layer(window);
           if (view_layer) {
             Object *ob = BKE_view_layer_active_object_get(view_layer);

@@ -25,6 +25,7 @@
 
 #include "ED_mesh.hh"
 #include "ED_object.hh"
+#include "ED_screen.hh"
 
 /* TODO: what is needed? */
 #include "DNA_armature_types.h"
@@ -37,6 +38,7 @@
 #include "DNA_scene_types.h"
 #include "DNA_sequence_types.h"
 #include "DNA_text_types.h"
+
 
 #include "BKE_armature.hh"
 #include "BKE_curve.hh"
@@ -53,14 +55,19 @@
 #include "BKE_report.hh"
 #include "BKE_scene.hh"
 
+/* Custom check if transform update. */
+#define NETWORK_UPDATE_TRANSFORM ((void *)0xABBACAAC)
+
 namespace blender::multiplayer {
 
 Dance MU_class_object;
 const bContext *CurrentContext;
 
-void MU_printRandomStatement(bContext *, void *, void *poin2)
-{
-  const char *message = static_cast<const char *>(poin2);
+void MU_printRandomStatement(bContext *, void *poin, void *)
+{ 
+  Multiplayer *mp = static_cast<Multiplayer *>(poin);
+
+  const char *message = mp->host_ip;
   printf("Message containing: %s, will be send:\n", message);
 
   MU_class_object.MU_send_message_to(std::string(message), 0, false, true, false);
@@ -72,6 +79,18 @@ void MU_initialize_network_class(const bContext *C)
 
   MU_class_object.MU_init(true, false);
 
+  /* Create Timer */
+  wmWindowManager *wm = CTX_wm_manager(CurrentContext);
+  wmTimer *timer = WM_event_timer_add(wm, CTX_wm_window(CurrentContext), TIMER, 0.1f);
+
+  /* Register and call operator */
+  WM_operatortype_append(MU_initialize_operator);
+  WM_operator_name_call(const_cast<bContext *>(CurrentContext),
+                        "NETWORK_MU_connection_alive",
+                        blender::wm::OpCallContext::InvokeDefault,
+                        nullptr,
+                        nullptr);
+
   /* Create packages */
   /* Contains: loc.x, loc.y, loc.z, rot.x, rot.y, rot.z, scale.x, scale.y, scale.z */
   MU_class_object.MU_create_package(
@@ -80,6 +99,43 @@ void MU_initialize_network_class(const bContext *C)
 
   /* Create callback for custom message */
   MU_class_object.MU_create_package_callback_function("Change_Object", MU_package_update_object);
+}
+
+static wmOperatorStatus MU_operator_invoke_timer(bContext *C, wmOperator *op, const wmEvent *event)
+{
+  wmWindowManager *wm = CTX_wm_manager(C);
+  wmWindow *window = CTX_wm_window(C);
+
+  wmTimer *timer = WM_event_timer_add(wm, window, wmEventType::TIMER, 0.1f);
+  op->customdata = timer;
+
+  WM_event_add_modal_handler(C, op);
+  return OPERATOR_RUNNING_MODAL;
+}
+
+static wmOperatorStatus MU_operator_modal_timer(bContext *C, wmOperator *op, const wmEvent *event)
+{
+  wmTimer *timer = reinterpret_cast<wmTimer *>(op->customdata);
+
+  if (event->type == wmEventType::TIMER && event->customdata == timer) {
+    /* Keep connection alive to enable for important message checks */
+    MU_class_object.MU_keep_alive(timer->time_duration);
+  }
+
+  return OPERATOR_PASS_THROUGH;
+}
+
+void MU_initialize_operator(wmOperatorType *ot)
+{
+  /*Create timer that is called every 0.1 seconds. */
+  ot->name = "Keep Connection Alive";
+  ot->idname = "NETWORK_MU_connection_alive";
+
+  ot->invoke = MU_operator_invoke_timer;
+  ot->modal = MU_operator_modal_timer;
+
+  /* flags */
+  ot->flag = 0;
 }
 
 void MU_host_same_device(bContext *, void *, void *)
@@ -146,21 +202,40 @@ void MU_package_transform(const std::string &buffer)
         BKE_libblock_find_name(bmain, ID_OB, objectID.c_str() + 2));
 
     if (ob) {
-      ob->loc[0] = MU_class_object.MU_data_to_variable<float>(buffer, 3);
-      ob->loc[1] = MU_class_object.MU_data_to_variable<float>(buffer, 4);
-      ob->loc[2] = MU_class_object.MU_data_to_variable<float>(buffer, 5);
+      float loc[3] = {MU_class_object.MU_data_to_variable<float>(buffer, 3),
+                      MU_class_object.MU_data_to_variable<float>(buffer, 4),
+                      MU_class_object.MU_data_to_variable<float>(buffer, 5)};
 
-      ob->rot[0] = MU_class_object.MU_data_to_variable<float>(buffer, 6);
-      ob->rot[1] = MU_class_object.MU_data_to_variable<float>(buffer, 7);
-      ob->rot[2] = MU_class_object.MU_data_to_variable<float>(buffer, 8);
+      float rot[3] = {MU_class_object.MU_data_to_variable<float>(buffer, 6),
+                      MU_class_object.MU_data_to_variable<float>(buffer, 7),
+                      MU_class_object.MU_data_to_variable<float>(buffer, 8)};
 
-      ob->scale[0] = MU_class_object.MU_data_to_variable<float>(buffer, 9);
-      ob->scale[1] = MU_class_object.MU_data_to_variable<float>(buffer, 10);
-      ob->scale[2] = MU_class_object.MU_data_to_variable<float>(buffer, 11);
+      float scale[3] = {MU_class_object.MU_data_to_variable<float>(buffer, 9),
+                        MU_class_object.MU_data_to_variable<float>(buffer, 10),
+                        MU_class_object.MU_data_to_variable<float>(buffer, 11)};
+
+      if (memcmp(loc, ob->loc, 3 * sizeof(float)) &&
+          memcmp(rot, ob->rot, 3 * sizeof(float)) &&
+          memcmp(scale, ob->scale, 3 * sizeof(float)))
+      {
+        return;
+      }
+      else if (loc[0] == ob->loc[0] && loc[1] == ob->loc[1] && loc[2] == ob->loc[2] &&
+               rot[0] == ob->rot[0] && rot[1] == ob->rot[1] && rot[2] == ob->rot[2] &&
+               scale[0] == ob->scale[0] && scale[1] == ob->scale[1] && scale[2] == ob->scale[2])
+      {
+        return;
+      }
+
+      memcpy(ob->loc, loc, 3 * sizeof(float));
+      memcpy(ob->rot, rot, 3 * sizeof(float));
+      memcpy(ob->scale, scale, 3 * sizeof(float));
+
 
       /* Notify blender that this object changed its transform. */
       DEG_id_tag_update(&ob->id, ID_RECALC_TRANSFORM);
-      WM_event_add_notifier(CurrentContext, NC_OBJECT | ND_TRANSFORM, ob);
+      WM_event_add_notifier(CurrentContext, NC_OBJECT | ND_TRANSFORM, NETWORK_UPDATE_TRANSFORM);
+
     }
   }
 }

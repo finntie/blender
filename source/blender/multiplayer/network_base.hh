@@ -70,6 +70,7 @@ class Dance {
   blender::Vector<int> disconnected_user_IDs_{};
   int at_player_number_ = 1;
   uint32_t at_imp_message_ = 1;
+  uint32_t at_long_message = 1;
   uint64_t last_time_ = 0;
   float time_checked_imp_ = 0.0f;
 

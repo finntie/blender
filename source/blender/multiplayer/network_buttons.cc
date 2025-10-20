@@ -36,10 +36,10 @@ void MU_draw_multiplayer_buttons(const bContext *C, Panel *panel)
     props.port_number = RNA_struct_type_find_property(&RNA_Multiplayer, "port");
     props.host_ip_number = RNA_struct_type_find_property(&RNA_Multiplayer, "host_ip");
     props.initialized = true;
-  }
 
-  // Initialize class
-  blender::multiplayer::MU_initialize_network_class(C);
+    // Initialize class
+    blender::multiplayer::MU_initialize_network_class(C);
+  }
 
   Scene *scene = CTX_data_scene(C);
 
@@ -51,14 +51,13 @@ void MU_draw_multiplayer_buttons(const bContext *C, Panel *panel)
   bt = uiDefBut(block, ButType::But, 0, IFACE_("Host"), 20, 130, 60, 20, nullptr, 0, 0, "");
 
   UI_but_func_set(
-      bt, blender::multiplayer::MU_host_same_device, (void *)"Random button!", nullptr);
+      bt, blender::multiplayer::MU_host_same_device, nullptr, nullptr);
 
   bt = uiDefBut(block, ButType::But, 0, IFACE_("Connect"), 20, 130, 60, 20, nullptr, 0, 0, "");
 
   UI_but_func_set(
-      bt, blender::multiplayer::MU_connect_same_device, (void *)"Random button!", nullptr);
+      bt, blender::multiplayer::MU_connect_same_device, nullptr, nullptr);
 
-  PointerRNA ptr = RNA_id_pointer_create(&scene->id);
   Multiplayer *mp = &scene->multiplayer;
   PointerRNA mu_ptr = RNA_pointer_create_discrete(&scene->id, &RNA_Multiplayer, mp);
 
@@ -83,7 +82,7 @@ void MU_draw_multiplayer_buttons(const bContext *C, Panel *panel)
                            " \u2022 Second line"));
 
   UI_but_func_set(
-      bt, blender::multiplayer::MU_printRandomStatement, (void *)"Port number!", mp->host_ip);
+      bt, blender::multiplayer::MU_printRandomStatement, mp, nullptr);
 }
 
 }  // namespace blender::multiplayer

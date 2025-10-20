@@ -691,10 +691,11 @@ void Dance::hole_punch()
   listen(true);
 }
 
-void Dance::MU_keep_alive(float dt)
+void Dance::MU_keep_alive(float time)
 {
+  /* TODO: fix this being dt instead of time (calling from connector). */
   if (current_moves_ == PUBLIC && is_host_) {
-    keep_alive_time_ -= dt;
+    keep_alive_time_ -= time;
     if (keep_alive_time_ <= 0.0f) {
       keep_alive_time_ = 60.0f;
 
@@ -706,10 +707,8 @@ void Dance::MU_keep_alive(float dt)
     }
   }
   else /* Send to every connection a #KeepAliveMessage message. */ {
-    quick_keep_alive_time_ -= dt;
-    if (quick_keep_alive_time_ <= 0.0f) {
-      quick_keep_alive_time_ = 0.5f;
-
+    if (quick_keep_alive_time_ <= time) {
+      quick_keep_alive_time_ = time + 0.5f;
       const char *message = "KeepAliveMessage";
       /* Send message to every connection. */
       for (const auto &value : them_addrss_.values()) {
@@ -835,6 +834,7 @@ bool Dance::listen(bool keep_checking)
   quit_listening_ = false;
   while (!quit_listening_) {
 
+    memset(listen_buffer, 0, sizeof(listen_buffer));
     socklen_t addr_size = sizeof(sockaddr_storage);
     const int buffer_len = recvfrom(sockfd_,
                                     static_cast<char *>(listen_buffer),
@@ -908,13 +908,20 @@ bool Dance::listen(bool keep_checking)
         /* Remove 'Imp ' from the buffer. */
         memcpy_s(
             listen_buffer, sizeof(listen_buffer), &listen_buffer[3], sizeof(listen_buffer) - 3);
-        const std::string buf(listen_buffer);
-        const std::string ID = std::string(get_word(buf, 0));
-        /* Remove ID from buffer. */
+        std::string buf(listen_buffer);
+        std::string ID = std::string(get_word(buf, 0));
+        /* Remove Imp ID from buffer. */
         memcpy_s(listen_buffer,
                  sizeof(listen_buffer),
                  &listen_buffer[ID.length() + 1],
                  sizeof(listen_buffer) - (ID.length() + 1));
+        buf = listen_buffer;
+        std::string ID_message = std::string(get_word(buf, 0));
+        /* Remove Message ID from buffer. */
+        memcpy_s(listen_buffer,
+                 sizeof(listen_buffer),
+                 &listen_buffer[ID_message.length() + 1],
+                 sizeof(listen_buffer) - (ID_message.length() + 1));
 
         bool long_full = true;
         /* Check if it is a long message */
@@ -941,17 +948,19 @@ bool Dance::listen(bool keep_checking)
 
           /* Add value to map */
           blender::Map<std::string, std::string> batch_map;
-          auto &batch_map_ret = long_message_storage_.lookup_or_add(ID, batch_map);
+          auto &batch_map_ret = long_message_storage_.lookup_or_add(ID_message, batch_map);
           std::string *value_ptr = batch_map_ret.lookup_ptr(num_1);
-          if (value_ptr) {
+          if (!value_ptr) {
             batch_map_ret.add(num_1, listen_buffer);
           }
 
           /* Check if we got all. */
-          if (batch_map_ret.size() < num_2) {
+          if (batch_map_ret.size() <= num_2) {
+            // printf("Size is %d out of %d\n", num_2, batch_map_ret.size());
             long_full = false;
           }
           else {
+            printf("Full message constructing\n");
             std::string fullMessage;
             fullMessage.reserve(num_2 * 1024);
             for (int i = 0; i < batch_map_ret.size(); i++) {
@@ -970,6 +979,8 @@ bool Dance::listen(bool keep_checking)
             }
             if (long_full) {
               long_message_storage_.remove(ID);
+              memcpy_s(
+                  listen_buffer, sizeof(listen_buffer), fullMessage.c_str(), fullMessage.size());
             }
           }
         }
@@ -1055,7 +1066,8 @@ bool Dance::listen(bool keep_checking)
                 if (them_numbers_.lookup(item.key) == userID) { /* Send to this user. */
                   send_message(imp_return_message.c_str(),
                                int(imp_return_message.size()),
-                               item.value, false,
+                               item.value,
+                               false,
                                nullptr);
                 }
               }
@@ -1159,7 +1171,9 @@ bool Dance::listen(bool keep_checking)
           const std::string message = &listen_buffer[7];
           const addrinfo *res = storage_to_addr_info(them_addr, addr_size);
           for (const auto &item : them_numbers_.items()) {
-            if (item.value != 0 || res != them_addrss_.lookup(item.key)) {
+            if (item.value != 0 &&
+                !memcmp(res->ai_addr, them_addrss_.lookup(item.key), res->ai_addrlen))
+            {
               /* Don't send to host (ourself) or the sender.*/
               MU_send_message_to(message, item.value, false, false, false);
             }
@@ -1271,7 +1285,7 @@ bool Dance::listen(bool keep_checking)
 
         /* Send a confirm that the message reached us succesfully, also give them their number */
         std::string confirm_message = "ConConfirm" + std::to_string(at_player_number_ - 1);
-        send_message(confirm_message.c_str(), int(confirm_message.size()), res,false, nullptr);
+        send_message(confirm_message.c_str(), int(confirm_message.size()), res, false, nullptr);
         /* Now return if we dont want to keep checking. */
         if (!keep_checking) {
           return true;
@@ -1316,7 +1330,7 @@ void Dance::send_callbacks()
           (*function)(user_package_storage_.front());
         }
         else {
-          printf("function not found\n");
+          //printf("function not found\n");
         }
       }
       user_package_storage_.pop();
@@ -1374,14 +1388,22 @@ void Dance::send_message(const char *message,
 
     for (int i = 0; i < amount_messages; i++) {
 
-      char part_message[1024];
-      snprintf(part_message, at_index - start_index, "%s", &message[start_index]);
+      printf("Sending message %d out of %d. \n", i, amount_messages);
+
+      const int copyAmount = 964;
+
+      char part_message[copyAmount + 1];
+      //snprintf(part_message, sizeof(part_message), "%s", &message[start_index]);
+      memcpy(part_message, &message[start_index], copyAmount);
+      part_message[copyAmount] = '\0'; /* Null terminate */
 
       /* Add format info */
       char format_message[64];
-      sprintf_s(format_message, "Long%d/%d ", i, amount_messages - 1);
+      sprintf_s(format_message, " Long%d/%d ", i, amount_messages - 1);
       std::string seperate_message = format_message + std::string(part_message);
 
+      /* Add Message ID */
+      seperate_message = std::to_string(at_long_message) + seperate_message;
 
       /* Make important */
       add_important_message(seperate_message, peer_number);
@@ -1392,8 +1414,7 @@ void Dance::send_message(const char *message,
                  int(seperate_message.size()),
                  0,
                  adress->ai_addr,
-                 adress->ai_addrlen) ==
-          -1)
+                 adress->ai_addrlen) == -1)
       {
         if (send_error == nullptr || strlen(send_error) < 200) {
           char error_buffer[256];
@@ -1408,8 +1429,9 @@ void Dance::send_message(const char *message,
       }
 
       start_index = at_index;
-      at_index += 964;
+      at_index += copyAmount;
     }
+    at_long_message++;
   }
   /* If message is not too long, send it. */
   else {
@@ -1419,8 +1441,10 @@ void Dance::send_message(const char *message,
       for (const auto key : them_addrss_.keys()) {
         if (memcmp(adress->ai_addr, them_addrss_.lookup(key)->ai_addr, adress->ai_addrlen) == 0) {
           peer_number = them_numbers_.lookup(key);
+          break;
         }
       }
+      message_string = message;
       add_important_message(message_string, peer_number);
     }
     else {

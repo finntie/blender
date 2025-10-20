@@ -4,6 +4,7 @@
 
 struct bContext;
 struct Object;
+struct wmOperatorType;
 namespace blender::multiplayer {
 
 /**
@@ -15,6 +16,8 @@ namespace blender::multiplayer {
 void MU_printRandomStatement(bContext *C, void *poin, void *poin2);
 
 void MU_initialize_network_class(const bContext *C);
+
+void MU_initialize_operator(wmOperatorType *OT);
 
 void MU_host_same_device(bContext *C, void *poin, void *poin2);
 
