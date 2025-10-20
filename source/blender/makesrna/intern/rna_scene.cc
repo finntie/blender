@@ -8586,6 +8586,25 @@ static void rna_def_scene_hydra(BlenderRNA *brna)
 
 static void rna_def_multiplayer(BlenderRNA* brna)
 {
+  static const EnumPropertyItem multiplayer_network_type[] = {
+      {MU_SAME_DEVICE,
+       "SAME_DEVICE",
+       0,
+       "Same Device",
+       "Connect with own device but multiple programs."},
+      {MU_LAN,
+       "LAN",
+       1,
+       "Local Area Network",
+       "Connect with other devices on the same wifi network."},
+      {MU_PUBLIC,
+       "PUBLIC",
+       2,
+       "Public Network",
+       "Connect with other devices from another wifi network."},
+      {0, nullptr, 0, nullptr, nullptr},
+  };
+
   StructRNA *srna;
   PropertyRNA *prop;
 
@@ -8597,11 +8616,24 @@ static void rna_def_multiplayer(BlenderRNA* brna)
   prop = RNA_def_property(srna, "port", PROP_INT, PROP_NONE);
   RNA_def_property_int_sdna(prop, nullptr, "port");
   RNA_def_property_range(prop, 1, 65535);
+  RNA_def_property_int_default(prop, 8392);
   RNA_def_property_ui_text(prop, "Port", "Server port number");
+
+  prop = RNA_def_property(srna, "connection_type", PROP_ENUM, PROP_NONE);
+  RNA_def_property_enum_items(prop, multiplayer_network_type);
+  RNA_def_property_ui_text(prop,
+                           "Connection Type",
+                           "Type of connection to use.");
 
   prop = RNA_def_property(srna, "host_ip", PROP_STRING, PROP_NONE);
   RNA_def_property_string_sdna(prop, nullptr, "host_ip");
   RNA_def_property_ui_text(prop, "Host IP", "IP adress of the host");
+
+  prop = RNA_def_property(srna, "use_ipv4", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, nullptr, "use_ipv4", 0);
+  RNA_def_property_ui_text(prop,
+                           "Force use IPV4",
+                           "Force using IPV4, else possibly IPV6 will be chosen.");
 
 }
 

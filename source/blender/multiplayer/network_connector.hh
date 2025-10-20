@@ -15,7 +15,13 @@ namespace blender::multiplayer {
  */
 void MU_printRandomStatement(bContext *C, void *poin, void *poin2);
 
+
+
 void MU_initialize_network_class(const bContext *C);
+
+void MU_add_client_to_vector(bContext *C, void *poin, void *poin2);
+
+blender::Vector<std::string> MU_get_clients_vector();
 
 void MU_initialize_operator(wmOperatorType *OT);
 

@@ -2098,8 +2098,9 @@ enum {
 typedef struct Multiplayer {
   int port;
   short connection_type;
+  char use_ipv4;
+  char _pad0[1];
   char host_ip[256];
-  char _pad0[2];
 
 } Multiplayer;
 
@@ -2107,7 +2108,7 @@ typedef struct Multiplayer {
 enum {
   MU_SAME_DEVICE = 0,
   MU_LAN = 1,
-  MU_PUBLIC = 3,
+  MU_PUBLIC = 2,
 };
 
 /** \} */

@@ -26,6 +26,8 @@ struct RestrictProperties {
 
   PropertyRNA *port_number;
   PropertyRNA *host_ip_number;
+  PropertyRNA *connection_type;
+  PropertyRNA *use_ipv4;
 };
 
 void MU_draw_multiplayer_buttons(const bContext *C, Panel *panel)
@@ -35,6 +37,8 @@ void MU_draw_multiplayer_buttons(const bContext *C, Panel *panel)
   if (!props.initialized) {
     props.port_number = RNA_struct_type_find_property(&RNA_Multiplayer, "port");
     props.host_ip_number = RNA_struct_type_find_property(&RNA_Multiplayer, "host_ip");
+    props.connection_type = RNA_struct_type_find_property(&RNA_Multiplayer, "connection_type");
+    props.use_ipv4 = RNA_struct_type_find_property(&RNA_Multiplayer, "use_ipv4");
     props.initialized = true;
 
     // Initialize class
@@ -48,22 +52,54 @@ void MU_draw_multiplayer_buttons(const bContext *C, Panel *panel)
   /* Create buttons. */
   uiBut *bt;
 
-  bt = uiDefBut(block, ButType::But, 0, IFACE_("Host"), 20, 130, 60, 20, nullptr, 0, 0, "");
-
-  UI_but_func_set(
-      bt, blender::multiplayer::MU_host_same_device, nullptr, nullptr);
-
-  bt = uiDefBut(block, ButType::But, 0, IFACE_("Connect"), 20, 130, 60, 20, nullptr, 0, 0, "");
-
-  UI_but_func_set(
-      bt, blender::multiplayer::MU_connect_same_device, nullptr, nullptr);
-
   Multiplayer *mp = &scene->multiplayer;
   PointerRNA mu_ptr = RNA_pointer_create_discrete(&scene->id, &RNA_Multiplayer, mp);
 
   if (!mu_ptr.data) {
     printf("mu_ptr not initialize'\n");
   }
+
+  /* Port Number */
+
+  bt = uiDefButR_prop(block,
+                      ButType::Num,
+                      1,
+                      IFACE_(""),
+                      100,
+                      200,
+                      UI_UNIT_X,
+                      UI_UNIT_Y,
+                      &mu_ptr,
+                      props.port_number,
+                      -1,
+                      0,
+                      0,
+                      TIP_("Set port number of connection\n"
+                           " \u2022 Second line"));
+
+  UI_but_func_set(bt, blender::multiplayer::MU_printRandomStatement, mp, nullptr);
+
+  /* Network Type */
+
+  bt = uiDefButR_prop(block,
+                      ButType::Menu,
+                      0,
+                      IFACE_("Network Type"),
+                      100,
+                      200,
+                      UI_UNIT_X,
+                      UI_UNIT_Y,
+                      &mu_ptr,
+                      props.connection_type,
+                      -1,
+                      0,
+                      0,
+                      TIP_("Set the connection type\n"
+                           " \u2022 Second line"));
+
+  UI_but_func_set(bt, blender::multiplayer::MU_printRandomStatement, mp, nullptr);
+
+  /* Host/Peer IP */
 
   bt = uiDefButR_prop(block,
                       ButType::Text,
@@ -78,11 +114,61 @@ void MU_draw_multiplayer_buttons(const bContext *C, Panel *panel)
                       -1,
                       0,
                       0,
-                      TIP_("Set port number of connection\n"
+                      TIP_("Insert IP of host/client\n"
                            " \u2022 Second line"));
 
-  UI_but_func_set(
-      bt, blender::multiplayer::MU_printRandomStatement, mp, nullptr);
+  //UI_but_func_set(bt, blender::multiplayer::MU_printRandomStatement, mp, nullptr);
+  bt = uiDefBut(block,
+                ButType::But,
+                0,
+                IFACE_("Add"),
+                100,
+                100,
+                UI_UNIT_X * 3,
+                UI_UNIT_Y,
+                nullptr,
+                0,
+                0,
+                TIP_ ("Set/Add IP"));
+
+  UI_but_func_set(bt, blender::multiplayer::MU_add_client_to_vector, mp, nullptr);
+
+  /* Force #IPV4 */
+
+  bt = uiDefButR_prop(block,
+                      ButType::ButToggle,
+                      0,
+                      IFACE_("Force IPV4"),
+                      100,
+                      200,
+                      UI_UNIT_X * 0.25f,
+                      UI_UNIT_Y,
+                      &mu_ptr,
+                      props.use_ipv4,
+                      -1,
+                      0,
+                      0,
+                      TIP_("Force IPV4, else if the network supports it, it could turn into ip6. \n"
+                           " \u2022 Second line"));
+
+  UI_but_func_set(bt, blender::multiplayer::MU_printRandomStatement, mp, nullptr);
+
+  /* Connect/Host buttons */
+
+  bt = uiDefBut(block, ButType::But, 0, IFACE_("Host"), 20, 130, 16, 20, nullptr, 0, 0, "");
+
+  UI_but_func_set(bt, blender::multiplayer::MU_host_same_device, mp, nullptr);
+
+  bt = uiDefBut(block, ButType::But, 0, IFACE_("Connect"), 20, 130, 16, 20, nullptr, 0, 0, "");
+
+  UI_but_func_set(bt, blender::multiplayer::MU_connect_same_device, mp, nullptr);
+
+  blender::Vector<std::string> client_ip_vector = multiplayer::MU_get_clients_vector();
+  for (int i = 0; i < client_ip_vector.size(); i++) {
+    bt = uiDefBut(
+        block, ButType::Label, 0, IFACE_(client_ip_vector[i].c_str()), 20, 130, 16, 20, nullptr, 0, 0, "");
+  }
+
 }
 
 }  // namespace blender::multiplayer

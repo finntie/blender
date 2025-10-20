@@ -62,15 +62,18 @@ namespace blender::multiplayer {
 
 Dance MU_class_object;
 const bContext *CurrentContext;
+static blender::Vector<std::string> ClientIPs;
 
-void MU_printRandomStatement(bContext *, void *poin, void *)
-{ 
-  Multiplayer *mp = static_cast<Multiplayer *>(poin);
+void MU_printRandomStatement(bContext *, void *, void *)
+{
+  return;
 
-  const char *message = mp->host_ip;
-  printf("Message containing: %s, will be send:\n", message);
+  //Multiplayer *mp = static_cast<Multiplayer *>(poin);
 
-  MU_class_object.MU_send_message_to(std::string(message), 0, false, true, false);
+  //const char *message = mp->host_ip;
+  //printf("Message containing: %s, will be send:\n", message);
+
+  //MU_class_object.MU_send_message_to(std::string(message), 0, false, true, false);
 }
 
 void MU_initialize_network_class(const bContext *C)
@@ -99,6 +102,17 @@ void MU_initialize_network_class(const bContext *C)
 
   /* Create callback for custom message */
   MU_class_object.MU_create_package_callback_function("Change_Object", MU_package_update_object);
+}
+
+void MU_add_client_to_vector(bContext *, void *poin, void *)
+{
+  Multiplayer *mp = static_cast<Multiplayer *>(poin);
+  ClientIPs.append(mp->host_ip);
+}
+
+blender::Vector<std::string> MU_get_clients_vector()
+{
+  return ClientIPs;
 }
 
 static wmOperatorStatus MU_operator_invoke_timer(bContext *C, wmOperator *op, const wmEvent *event)
@@ -138,15 +152,38 @@ void MU_initialize_operator(wmOperatorType *ot)
   ot->flag = 0;
 }
 
-void MU_host_same_device(bContext *, void *, void *)
+void MU_host_same_device(bContext *, void *poin, void *)
 {
-  MU_class_object.MU_host(Dance::SAMEDEVICE, 10);
+  Dance::dance_moves moves = Dance::SAMEDEVICE;
+  int port = 8392;
+  bool force_ipv4 = false;
+
+  Multiplayer *mp = static_cast<Multiplayer *>(poin);
+  if (mp) {
+    moves = static_cast<Dance::dance_moves>(mp->connection_type);
+    port = mp->port;
+    force_ipv4 = static_cast<bool>(mp->use_ipv4);
+  }
+
+  MU_class_object.MU_host(moves, 10, std::to_string(port).c_str(), force_ipv4, ClientIPs);
   // blender::multiplayer::MU_reset_scene(CurrentContext);
 }
 
-void MU_connect_same_device(bContext *, void *, void *)
+void MU_connect_same_device(bContext *, void *poin, void *)
 {
-  if (MU_class_object.MU_connect(Dance::SAMEDEVICE, "192.168.0.0")) {
+  Dance::dance_moves moves = Dance::SAMEDEVICE;
+  int port = 8392;
+  bool force_ipv4 = false;
+
+  Multiplayer *mp = static_cast<Multiplayer *>(poin);
+  if (mp) {
+    moves = static_cast<Dance::dance_moves>(mp->connection_type);
+    port = mp->port;
+    force_ipv4 = static_cast<bool>(mp->use_ipv4);
+  }
+
+
+  if (MU_class_object.MU_connect(moves, ClientIPs[0].c_str(), std::to_string(port).c_str(), force_ipv4)) {
     // Succeeded
     // blender::multiplayer::MU_reset_scene(CurrentContext);
   }
