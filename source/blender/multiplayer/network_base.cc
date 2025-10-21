@@ -1,4 +1,5 @@
 #include "network_base.hh"
+#include "CLG_log.h"
 
 /* Networking classes */
 #include <iphlpapi.h> /* For retrieving private IP */
@@ -14,6 +15,8 @@
 
 #pragma comment(lib, "Ws2_32.lib")
 #pragma comment(lib, "Iphlpapi.lib")
+
+static CLG_LogRef LOG = {"multiplayer"};
 
 /*
  * ---------------------------------------------------------------------------------------
@@ -57,12 +60,12 @@ void Dance::MU_init(bool use_callback, bool force_IPV4)
   WSADATA wsa_data;
 
   if (WSAStartup(MAKEWORD(2, 2), &wsa_data) != 0) {
-    /* LOGLINE(DLogObj, DanceLogger::DANCE_CRITICAL, "WSAStartup failed"); */
+    CLOG_ERROR(&LOG, "WSAStartup failed");
     exit(1);
   }
   if (LOBYTE(wsa_data.wVersion) != 2 || HIBYTE(wsa_data.wVersion) != 2) {
     WSACleanup(); /* We are done with winsock */
-    /* LOGLINE(DLogObj, DanceLogger::DANCE_CRITICAL, "Version 2.2 of winsock is not available"); */
+    CLOG_ERROR(&LOG, "Version 2.2 of winsock is not available");
     exit(1);
   }
 
@@ -97,9 +100,7 @@ void Dance::MU_host(Dance::dance_moves moves,
   }
   if (test_port <= 1024 || test_port >= 49151) {
     port = host_port_;
-    char error_buffer[256];
-    sprintf_s(error_buffer, sizeof(error_buffer), "Default port: %s is used", host_port_);
-    /* LOGLINE(DLogObj, DanceLogger::DANCE_INFO, error_buffer); */
+    CLOG_INFO(&LOG, "Default port: %s is used", host_port_);
   }
   else {
     memcpy_s(host_port_, sizeof(host_port_), port, strlen(port));
@@ -153,12 +154,9 @@ void Dance::MU_host(Dance::dance_moves moves,
       hints.ai_socktype = SOCK_DGRAM;
       /* #addrinfo */
       if ((status = getaddrinfo(other_IP, host_port_, &hints, &res)) != 0) {
-        char error_buffer[256];
-        sprintf_s(error_buffer,
-                  sizeof(error_buffer),
-                  "(Invalid IP) getaddrinfo error on clients IP %s",
-                  get_send_errors(WSAGetLastError()));
-        /* LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, error_buffer); */
+        CLOG_ERROR(&LOG,
+                   "(Invalid IP) getaddrinfo error on clients IP %s",
+                   get_send_errors(WSAGetLastError()));
         continue;
       }
       /* Get name of ourself. */
@@ -204,12 +202,7 @@ void Dance::MU_host(Dance::dance_moves moves,
 
   /* Get address info of the host (ourself). */
   if ((status = getaddrinfo(own_IP, host_port_, &hints, &res)) != 0) {
-    char error_buffer[256];
-    sprintf_s(error_buffer,
-              sizeof(error_buffer),
-              "getaddrinfo error: %s",
-              get_send_errors(WSAGetLastError()));
-    /* LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, error_buffer); */
+    CLOG_ERROR(&LOG, "getaddrinfo error: %s", get_send_errors(WSAGetLastError()));
     return;
   }
 
@@ -227,34 +220,19 @@ void Dance::MU_host(Dance::dance_moves moves,
 
   /* Create Socket. */
   if ((sockfd_ = socket(res->ai_family, res->ai_socktype, res->ai_protocol)) == INVALID_SOCKET) {
-    char error_buffer[256];
-    sprintf_s(error_buffer,
-              sizeof(error_buffer),
-              "Error on socket creation: %s",
-              get_send_errors(WSAGetLastError()));
-    /* LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, error_buffer); */
+    CLOG_ERROR(&LOG, "Error on socket creation: %s", get_send_errors(WSAGetLastError()));
     return;
   }
 
   /* Loose the "socket already in use" error. */
   if (setsockopt(sockfd_, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1) {
-    char error_buffer[256];
-    sprintf_s(error_buffer,
-              sizeof(error_buffer),
-              "setsockopt error: %s",
-              get_send_errors(WSAGetLastError()));
-    /* LOGLINE(DLogObj, DanceLogger::DANCE_WARNING, error_buffer); */
+    CLOG_WARN(&LOG, "setsockopt error: %s", get_send_errors(WSAGetLastError()));
     return;
   }
 
   /* Bind. */
   if (bind(sockfd_, res->ai_addr, int(res->ai_addrlen)) == -1) {
-    char error_buffer[256];
-    sprintf_s(error_buffer,
-              sizeof(error_buffer),
-              "Error on binding: %s",
-              get_send_errors(WSAGetLastError()));
-    /* LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, error_buffer); */
+    CLOG_ERROR(&LOG, "Error on binding: %s", get_send_errors(WSAGetLastError()));
     return;
   }
 
@@ -328,9 +306,7 @@ bool Dance::MU_connect(dance_moves moves, const char *host_IP, const char *port,
   }
   if (test_port <= 1024 || test_port >= 49151) {
     port = host_port_;
-    char error_buffer[256];
-    sprintf_s(error_buffer, sizeof(error_buffer), "Default port: %s is used", host_port_);
-    /*LOGLINE(DLogObj, DanceLogger::DANCE_INFO, error_buffer); */
+    CLOG_INFO(&LOG, "Default port: %s is used", host_port_);
   }
   else {
     memcpy_s(host_port_, sizeof(host_port_), port, strlen(port));
@@ -375,12 +351,7 @@ bool Dance::MU_connect(dance_moves moves, const char *host_IP, const char *port,
   hints.ai_socktype = SOCK_DGRAM;
   /* #addrinfo */
   if ((status = getaddrinfo(other_IP, host_port_, &hints, &res)) != 0) {
-    char error_buffer[256];
-    sprintf_s(error_buffer,
-              sizeof(error_buffer),
-              "getaddrinfo error on host: %s",
-              get_send_errors(WSAGetLastError()));
-    /*LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, error_buffer); */
+    CLOG_ERROR(&LOG, "getaddrinfo error on host: %s", get_send_errors(WSAGetLastError()));
     reset_state();
     return false;
   }
@@ -413,12 +384,7 @@ bool Dance::MU_connect(dance_moves moves, const char *host_IP, const char *port,
 
   /* Get address info of ourself. */
   if ((status = getaddrinfo(own_IP2, host_port_, &hints, &res)) != 0) {
-    char error_buffer[256];
-    sprintf_s(error_buffer,
-              sizeof(error_buffer),
-              "getaddrinfo error: %s",
-              get_send_errors(WSAGetLastError()));
-    /*LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, error_buffer); */
+    CLOG_ERROR(&LOG, "getaddrinfo error: %s", get_send_errors(WSAGetLastError()));
     reset_state();
     return false;
   }
@@ -443,12 +409,7 @@ bool Dance::MU_connect(dance_moves moves, const char *host_IP, const char *port,
 
   /* Create Socket. */
   if ((sockfd_ = socket(res->ai_family, res->ai_socktype, res->ai_protocol)) == INVALID_SOCKET) {
-    char error_buffer[256];
-    sprintf_s(error_buffer,
-              sizeof(error_buffer),
-              "Error on socket creation: %s",
-              get_send_errors(WSAGetLastError()));
-    /*LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, error_buffer); */
+    CLOG_ERROR(&LOG, "Error on socket creation: %s", get_send_errors(WSAGetLastError()));
     reset_state();
     return false;
   }
@@ -456,12 +417,7 @@ bool Dance::MU_connect(dance_moves moves, const char *host_IP, const char *port,
   /* Bind only if public IP is used, the program does not need to bind elsewere. */
   if (moves == PUBLIC) {
     if (bind(sockfd_, res->ai_addr, int(res->ai_addrlen)) == -1) {
-      char error_buffer[256];
-      sprintf_s(error_buffer,
-                sizeof(error_buffer),
-                "Error on binding: %s",
-                get_send_errors(WSAGetLastError()));
-      /*LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, error_buffer); */
+      CLOG_ERROR(&LOG, "Error on binding: %s", get_send_errors(WSAGetLastError()));
       reset_state();
       return false;
     }
@@ -504,12 +460,7 @@ bool Dance::MU_connect(dance_moves moves, const char *host_IP, const char *port,
 
   /* Get address info of the host. */
   if ((status = getaddrinfo(other_IP, host_port_, &hints, &dest)) != 0) {
-    char error_buffer[256];
-    sprintf_s(error_buffer,
-              sizeof(error_buffer),
-              "getaddrinfo error: %s",
-              get_send_errors(WSAGetLastError()));
-    /*LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, error_buffer); */
+    CLOG_ERROR(&LOG, "getaddrinfo error: %s", get_send_errors(WSAGetLastError()));
     reset_state();
     return false;
   }
@@ -517,12 +468,7 @@ bool Dance::MU_connect(dance_moves moves, const char *host_IP, const char *port,
   /* Connect for windows to send the error message to this socket, otherwise it may not does this.
    */
   if (connect(sockfd_, dest->ai_addr, int(dest->ai_addrlen)) != 0) {
-    char error_buffer[256];
-    sprintf_s(error_buffer,
-              sizeof(error_buffer),
-              "connection error: %s",
-              get_send_errors(WSAGetLastError()));
-    /*LOGLINE(DLogObj, DanceLogger::DANCE_WARNING, error_buffer); */
+    CLOG_ERROR(&LOG, "connection error: %s", get_send_errors(WSAGetLastError()));
     reset_state();
     return false;
   }
@@ -530,10 +476,7 @@ bool Dance::MU_connect(dance_moves moves, const char *host_IP, const char *port,
   /* Using #send (not #sendto), because the program is connected and has set up a default location.
    */
   if (send(sockfd_, connect_message.c_str(), int(connect_message.size()), 0) == -1) {
-    char error_buffer[256];
-    sprintf_s(
-        error_buffer, sizeof(error_buffer), "Send failed: %s", get_send_errors(WSAGetLastError()));
-    /*LOGLINE(DLogObj, DanceLogger::DANCE_WARNING, error_buffer); */
+    CLOG_ERROR(&LOG, "Send failed: %s", get_send_errors(WSAGetLastError()));
     reset_state();
     return false;
   }
@@ -545,12 +488,7 @@ bool Dance::MU_connect(dance_moves moves, const char *host_IP, const char *port,
   /* Unblock socket. */
   u_long iMode = 1;
   if (ioctlsocket(sockfd_, FIONBIO, &iMode) != 0) {
-    char error_buffer[256];
-    sprintf_s(error_buffer,
-              sizeof(error_buffer),
-              "Could not unblock socket: %s",
-              get_send_errors(WSAGetLastError()));
-    /*LOGLINE(DLogObj, DanceLogger::DANCE_WARNING, error_buffer); */
+    CLOG_ERROR(&LOG, "Could not unblock socket: %s", get_send_errors(WSAGetLastError()));
     reset_state();
     return false;
   }
@@ -558,17 +496,13 @@ bool Dance::MU_connect(dance_moves moves, const char *host_IP, const char *port,
   if ((result = recv(sockfd_, buffer, MAXPACKAGESIZE, MSG_PEEK)) < 0)
   { /* This message can be assumed safely, since this is a conConfirm. */
     if (WSAGetLastError() == 10054) { /* Connection reset by peer. */
-      /*LOGLINE(DLogObj, DanceLogger::DANCE_WARNING, "Could not connect to socket, is the host
-       * connected?"); */
+      CLOG_WARN(&LOG, "Could not connect to socket, is the host connected?");
       reset_state();
       return false;
     }
-    char error_buffer[256];
-    sprintf_s(error_buffer,
-              sizeof(error_buffer),
-              "Receive error trying to connect, did the host lag out?: %s",
-              get_send_errors(WSAGetLastError()));
-    /*LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, error_buffer); */
+    CLOG_ERROR(&LOG,
+               "Receive error trying to connect, did the host lag out?: %s",
+               get_send_errors(WSAGetLastError()));
     reset_state();
     return false;
   }
@@ -576,12 +510,7 @@ bool Dance::MU_connect(dance_moves moves, const char *host_IP, const char *port,
   /* Block socket again. */
   iMode = 0;
   if (ioctlsocket(sockfd_, FIONBIO, &iMode) != 0) {
-    char error_buffer[256];
-    sprintf_s(error_buffer,
-              sizeof(error_buffer),
-              "Could not block socket: %s",
-              get_send_errors(WSAGetLastError()));
-    /*LOGLINE(DLogObj, DanceLogger::DANCE_WARNING, error_buffer); */
+    CLOG_ERROR(&LOG, "Could not block socket: %s", get_send_errors(WSAGetLastError()));
     reset_state();
     return false;
   }
@@ -804,12 +733,7 @@ bool Dance::listen(bool keep_checking)
   if (setsockopt(
           sockfd_, SOL_SOCKET, SO_SNDBUF, (char *)&send_buffer_size, sizeof(send_buffer_size)) < 0)
   {
-    char error_buffer[256];
-    sprintf_s(error_buffer,
-              sizeof(error_buffer),
-              "Error setting send buffer size: %s",
-              get_send_errors(WSAGetLastError()));
-    /*LOGLINE(DLogObj, DanceLogger::DANCE_WARNING, error_buffer); */
+    CLOG_WARN(&LOG, "Error setting send buffer size: %s", get_send_errors(WSAGetLastError()));
   }
   /* Set receive buffer size. */
   if (setsockopt(sockfd_,
@@ -818,12 +742,7 @@ bool Dance::listen(bool keep_checking)
                  (char *)&receive_buffer_size,
                  sizeof(receive_buffer_size)) < 0)
   {
-    char error_buffer[256];
-    sprintf_s(error_buffer,
-              sizeof(error_buffer),
-              "Error setting receive buffer size: %s",
-              get_send_errors(WSAGetLastError()));
-    /*LOGLINE(DLogObj, DanceLogger::DANCE_WARNING, error_buffer); */
+    CLOG_WARN(&LOG, "Error setting receive buffer size: %s", get_send_errors(WSAGetLastError()));
   }
 
   /* Set current time. */
@@ -845,30 +764,21 @@ bool Dance::listen(bool keep_checking)
 
     if (buffer_len < 0) {
       /* Highly likely that the connection was reset by peer, if not, check it out! */
-      // const bool removed_peer = handle_disconnection(them_addr, addr_size);
+      const bool removed_peer = handle_disconnection(them_addr, addr_size);
 
-      // if (removed_peer && !is_host_) { /* TODO: what if Public connection? */
-      //   quit_listening_ = true;
-      //   listen_thread_.detach();
-      //   return false;
-      // }
-      if (true) {
-        char error_buffer[256];
-        sprintf_s(error_buffer,
-                  sizeof(error_buffer),
-                  "Error receiving message: %s",
-                  get_send_errors(WSAGetLastError()));
-        printf(get_send_errors(WSAGetLastError()));
-        /*LOGLINE(DLogObj, DanceLogger::DANCE_INFO, error_buffer); */
+      if (removed_peer && !is_host_) { /* TODO: what if Public connection? */
+        quit_listening_ = true;
+        listen_thread_.detach();
+        return false;
+      }
+      else {
+        CLOG_INFO(&LOG, "Error receiving message: %s", get_send_errors(WSAGetLastError()));
       }
     }
     else if (buffer_len == 0) {
-      char error_buffer[256];
-      sprintf_s(error_buffer,
-                sizeof(error_buffer),
-                "Buffer of 0 received, connection closed?: %s",
-                get_send_errors(WSAGetLastError()));
-      /*LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, error_buffer); */
+      CLOG_ERROR(&LOG,
+                 "Buffer of 0 received, connection closed?: %s",
+                 get_send_errors(WSAGetLastError()));
     }
     else {
       /* Check buffer size DEBUG.
@@ -883,12 +793,7 @@ bool Dance::listen(bool keep_checking)
        * } */
 
       if (buffer_len >= MAXPACKAGESIZE) {
-        char error_buffer[256];
-        sprintf_s(error_buffer,
-                  sizeof(error_buffer),
-                  "Message too long: %s",
-                  get_send_errors(WSAGetLastError()));
-        /*LOGLINE(DLogObj, DanceLogger::DANCE_INFO, error_buffer); */
+        CLOG_INFO(&LOG, "Message too long: %s", get_send_errors(WSAGetLastError()));
         continue;
       }
 
@@ -971,9 +876,8 @@ bool Dance::listen(bool keep_checking)
               else {
                 /* Something went wrong, full message is not complete. */
                 long_full = false;
-                // const char *error_buffer =
-                //     "Not all batch messages were complete trying to recreate full message";
-                /*LOGLINE(DLogObj, DanceLogger::DANCE_MESSAGE, error_buffer); */
+                CLOG_INFO(&LOG,
+                          "Not all batch messages were complete trying to recreate full message");
                 break;
               }
             }
@@ -1025,17 +929,12 @@ bool Dance::listen(bool keep_checking)
 
               /* Probably do something */
               if (value.message.size() < 200) {
-                char error_buffer[256];
-                sprintf_s(error_buffer,
-                          sizeof(error_buffer),
-                          "Never received important message confirmation from message: %s",
-                          value.message.c_str());
-                /*LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, error_buffer); */
+                CLOG_ERROR(&LOG,
+                           "Never received important message confirmation from message: %s",
+                           value.message.c_str());
               }
               else {
-                /*LOGLINE(DLogObj, DanceLogger::DANCE_WARNING, "Needed to send important message a
-                 * second time"); */
-                printf("Never received important message confirmation from message");
+                CLOG_ERROR(&LOG, "Never received important message confirmation from message");
               }
             }
             else /* Send again. */ {
@@ -1047,16 +946,12 @@ bool Dance::listen(bool keep_checking)
 
               /* TODO: is user_ID correct? */
               if (value.message.size() < 200) {
-                char error_buffer[256];
-                sprintf_s(error_buffer,
-                          sizeof(error_buffer),
+                CLOG_WARN(&LOG,
                           "Needed to send this important message a second time: %s",
                           value.message.c_str());
-                /*LOGLINE(DLogObj, DanceLogger::DANCE_WARNING, error_buffer); */
               }
               else {
-                /*LOGLINE(DLogObj, DanceLogger::DANCE_WARNING, "Needed to send important message a
-                 * second time"); */
+                CLOG_WARN(&LOG, "Needed to send an important message a second time");
               }
 
               const std::string imp_return_message = "Imp" + std::to_string(value.ID) + " " +
@@ -1219,18 +1114,15 @@ bool Dance::listen(bool keep_checking)
       if (received_messages_.size() > max_size_message_vector_num) {
         char error_buffer[256];
         if (received_messages_.back().size() > 200) {
-          sprintf_s(error_buffer,
-                    sizeof(error_buffer),
-                    "Message getting deleted due to buffer being full: %s",
-                    "Could not print message (message was too long)");
+          CLOG_WARN(&LOG,
+                    "Message getting deleted due to buffer being full: Could not print message "
+                    "(message was too long)");
         }
         else {
-          sprintf_s(error_buffer,
-                    sizeof(error_buffer),
+          CLOG_WARN(&LOG,
                     "Message getting deleted due to buffer being full: %s",
                     received_messages_.back().c_str());
         }
-        /*LOGLINE(DLogObj, DanceLogger::DANCE_INFO, error_buffer); */
         received_messages_.pop_back();
       }
       message_vector_mutex_.unlock();
@@ -1329,9 +1221,6 @@ void Dance::send_callbacks()
         if (function) {
           (*function)(user_package_storage_.front());
         }
-        else {
-          //printf("function not found\n");
-        }
       }
       user_package_storage_.pop();
     }
@@ -1388,12 +1277,11 @@ void Dance::send_message(const char *message,
 
     for (int i = 0; i < amount_messages; i++) {
 
-      printf("Sending message %d out of %d. \n", i, amount_messages);
+      //printf("Sending message %d out of %d. \n", i, amount_messages);
 
       const int copyAmount = 964;
 
       char part_message[copyAmount + 1];
-      //snprintf(part_message, sizeof(part_message), "%s", &message[start_index]);
       memcpy(part_message, &message[start_index], copyAmount);
       part_message[copyAmount] = '\0'; /* Null terminate */
 
@@ -1417,14 +1305,10 @@ void Dance::send_message(const char *message,
                  adress->ai_addrlen) == -1)
       {
         if (send_error == nullptr || strlen(send_error) < 200) {
-          char error_buffer[256];
-          sprintf_s(error_buffer,
-                    sizeof(error_buffer),
-                    "Send failed: %s",
-                    get_send_errors(WSAGetLastError()));
+          CLOG_WARN(&LOG, "Send failed: %s", get_send_errors(WSAGetLastError()));
         }
         else {
-          /*LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, send_error); */
+          CLOG_WARN(&LOG, send_error);
         }
       }
 
@@ -1459,14 +1343,10 @@ void Dance::send_message(const char *message,
                adress->ai_addrlen) == -1)
     {
       if (send_error == nullptr || strlen(send_error) < 200) {
-        char error_buffer[256];
-        sprintf_s(error_buffer,
-                  sizeof(error_buffer),
-                  "Send failed: %s",
-                  get_send_errors(WSAGetLastError()));
+        CLOG_WARN(&LOG, "Send failed: %s", get_send_errors(WSAGetLastError()));
       }
       else {
-        /*LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, send_error); */
+        CLOG_WARN(&LOG, send_error);
       }
     }
   }
@@ -1593,8 +1473,7 @@ std::string Dance::MU_get_IP(bool public_IP)
     ULONG output_buffer_length = sizeof(IP_ADAPTER_INFO);
     pip_adapter_info = (IP_ADAPTER_INFO *)malloc(sizeof(IP_ADAPTER_INFO));
     if (pip_adapter_info == NULL) {
-      /*LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, "Error allocating memory needed to call
-       * GetAdaptersinfo1"); */
+      CLOG_ERROR(&LOG, "Error allocating memory needed to call #GetAdaptersinfo1.");
     }
     /* Make an initial call to #GetAdaptersInfo to get the necessary size into the
      * #output_buffer_length variable. */
@@ -1602,8 +1481,7 @@ std::string Dance::MU_get_IP(bool public_IP)
       free(pip_adapter_info);
       pip_adapter_info = (IP_ADAPTER_INFO *)malloc(output_buffer_length);
       if (pip_adapter_info == NULL) {
-        /*LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, "Error allocating memory needed to call
-         * GetAdaptersinfo2"); */
+        CLOG_ERROR(&LOG, "Error allocating memory needed to call #GetAdaptersinfo2.");
       }
     }
     if ((return_value = GetAdaptersInfo(pip_adapter_info, &output_buffer_length)) == NO_ERROR) {
@@ -1648,12 +1526,7 @@ std::string Dance::MU_get_IP(bool public_IP)
       }
     }
     else {
-      char error_buffer[256];
-      sprintf_s(error_buffer,
-                sizeof(error_buffer),
-                "GetAdaptersInfo failed with error: %d\n",
-                return_value);
-      /*LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, error_buffer); */
+      CLOG_ERROR(&LOG, "GetAdaptersInfo failed with error: %d\n", return_value);
     }
     if (pip_adapter_info) {
       free(pip_adapter_info);
@@ -1675,7 +1548,7 @@ std::string Dance::get_website()
   const std::string get_http = "GET / HTTP/1.1\r\nHost: " + url + "\r\nConnection: close\r\n\r\n";
 
   if (WSAStartup(MAKEWORD(2, 2), &wsa_data) != 0) {
-    /*LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, "WSASTARTUP failed trying to get the website"); */
+    CLOG_ERROR(&LOG, "WSASTARTUP failed trying to get the website");
     return "0";
   }
 
@@ -1697,12 +1570,7 @@ std::string Dance::get_website()
     ipv_ = AF_INET;
     url = "api.ipify.org";
     if ((status = getaddrinfo(url.c_str(), "80", &hints, &res)) != 0) {
-      char error_buffer[256];
-      sprintf_s(error_buffer,
-                sizeof(error_buffer),
-                "error while getaddrinfo ourself: %s",
-                get_send_errors(WSAGetLastError()));
-      /*LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, error_buffer); */
+      CLOG_ERROR(&LOG, "error while getaddrinfo ourself: %s", get_send_errors(WSAGetLastError()));
       return "0";
     }
   }
@@ -1723,23 +1591,13 @@ std::string Dance::get_website()
 
   /* And connect. */
   if (connect(socket_temp, res->ai_addr, int(res->ai_addrlen)) != 0) {
-    char error_buffer[256];
-    sprintf_s(error_buffer,
-              sizeof(error_buffer),
-              "Could not connect: %s",
-              get_send_errors(WSAGetLastError()));
-    /*LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, error_buffer); */
+    CLOG_ERROR(&LOG, "Could not connect: %s", get_send_errors(WSAGetLastError()));
     return "0";
   }
 
   if (send(socket_temp, get_http.c_str(), int(strlen(get_http.c_str())), 0) == -1)
   { /* Send request to site. */
-    char error_buffer[256];
-    sprintf_s(error_buffer,
-              sizeof(error_buffer),
-              "Could not send: %s",
-              get_send_errors(WSAGetLastError()));
-    /*LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, error_buffer); */
+    CLOG_ERROR(&LOG, "Could not send: %s", get_send_errors(WSAGetLastError()));
   }
 
   /* Sending a message to the site caused the site to send a message back with information.
@@ -1795,7 +1653,7 @@ void Dance::MU_send_message_to(
       }
     }
     /* If here, #them_ID is not available. */
-    /*LOGLINE(DLogObj, DanceLogger::DANCE_WARNING, "them ID is not found"); */
+    CLOG_ERROR(&LOG, "them ID is not found");
     return;
   }
   else {           /* not host. */
@@ -1949,7 +1807,7 @@ void Dance::MU_prepare_package(const char *package_name, char *r_data_message)
     }
     /* Message too big, report it and return. */
     if (offset > MAXPACKAGESIZE - 10) {
-      /*LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, "Error, message size too big"); */
+      CLOG_ERROR(&LOG, "Error, message size too big");
       return;
     }
   }
@@ -1974,7 +1832,7 @@ addrinfo *Dance::storage_to_addr_info(sockaddr_storage input, int input_size)
     res = reinterpret_cast<addrinfo *>(malloc(sizeof(addrinfo)));
 
     if (res == NULL) {
-      /*LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, "Malloc failed"); */
+      CLOG_ERROR(&LOG, "Malloc failed");
       return nullptr;
     }
     /* Manually copy the adress. */
@@ -1983,7 +1841,7 @@ addrinfo *Dance::storage_to_addr_info(sockaddr_storage input, int input_size)
 
     res->ai_addr = reinterpret_cast<struct sockaddr *>(malloc(input_size));
     if (res->ai_addr == NULL) {
-      /*LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, "Malloc failed"); */
+      CLOG_ERROR(&LOG, "Malloc failed");
       return nullptr;
     }
     memcpy(res->ai_addr, &input, input_size);
@@ -2010,12 +1868,7 @@ addrinfo *Dance::storage_to_addr_info(sockaddr_storage input, int input_size)
     hints.ai_socktype = SOCK_DGRAM;
     /* #addrinfo */
     if ((status = getaddrinfo(address_struct, host_port_, &hints, &res)) != 0) {
-      char error_buffer[256];
-      sprintf_s(error_buffer,
-                sizeof(error_buffer),
-                "getaddrinfo error on clients IP: %s",
-                get_send_errors(WSAGetLastError()));
-      /*LOGLINE(DLogObj, DanceLogger::DANCE_ERROR, error_buffer); */
+      CLOG_ERROR(&LOG, "getaddrinfo error on clients IP: %s", get_send_errors(WSAGetLastError()));
     }
   }
 

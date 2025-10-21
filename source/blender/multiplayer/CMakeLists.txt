@@ -14,6 +14,7 @@ set(INC
   ../compositor/algorithms
   ../compositor/cached_resources
   ../compositor/derived_resources
+  ../../intern/clog
   # RNA_prototypes.hh
   ${CMAKE_BINARY_DIR}/source/blender/makesrna
 )
@@ -46,6 +47,7 @@ set(LIB
   PRIVATE bf::intern::guardedalloc
   PRIVATE bf::nodes
   PRIVATE bf::windowmanager
+  PRIVATE bf::intern::clog
 )
 
 if(WITH_UV_SLIM)
