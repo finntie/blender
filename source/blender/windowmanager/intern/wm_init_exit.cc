@@ -70,6 +70,8 @@
 
 #include "RNA_define.hh"
 
+#include "network_connector.hh"
+
 #include "WM_api.hh"
 #include "WM_keymap.hh"
 #include "WM_message.hh"
@@ -223,6 +225,8 @@ void WM_init(bContext *C, int argc, const char **argv)
   BKE_library_callback_remap_editor_id_reference_set(WM_main_remap_editor_id_reference);
   BKE_spacedata_callback_id_remap_set(ED_spacedata_id_remap_single);
   DEG_editors_set_update_cb(ED_render_id_flush_update, ED_render_scene_update);
+
+  blender::multiplayer::MU_initialize_network_class(C);
 
   ED_spacetypes_init();
 

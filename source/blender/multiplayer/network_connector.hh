@@ -23,8 +23,6 @@ void MU_add_client_to_vector(bContext *C, void *poin, void *poin2);
 
 blender::Vector<std::string> MU_get_clients_vector();
 
-void MU_initialize_operator(wmOperatorType *OT);
-
 void MU_host_same_device(bContext *C, void *poin, void *poin2);
 
 void MU_connect_same_device(bContext *C, void *poin, void *poin2);
@@ -41,4 +39,8 @@ void MU_layer_update(Object *ob);
 void MU_package_transform(const std::string& buffer);
 
 void MU_package_update_object(const std::string &buffer);
+
+void MU_timer_operator(wmOperatorType *OT);
+
+
 }  // namespace blender::multiplayer

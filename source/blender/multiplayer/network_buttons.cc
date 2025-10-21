@@ -16,6 +16,9 @@
 #include "UI_interface_layout.hh"
 #include "UI_resources.hh"
 
+#include "BLI_string_utf8.h"
+#include "BLI_listbase.h"
+
 #include "network_buttons.hh"
 #include "network_connector.hh"
 
@@ -30,6 +33,20 @@ struct RestrictProperties {
   PropertyRNA *use_ipv4;
 };
 
+void MU_panel_register(ARegionType *art)
+{
+  PanelType *pt;
+
+  /* Multiplayer UI */
+  pt = MEM_callocN<PanelType>("spacetype view3d panel multiplayer");
+  STRNCPY_UTF8(pt->idname, "VIEW3D_PT_multiplayer");
+  STRNCPY_UTF8(pt->label, N_("Multiplayer Settings"));
+  STRNCPY_UTF8(pt->category, "Multiplayer");
+  STRNCPY_UTF8(pt->translation_context, BLT_I18NCONTEXT_DEFAULT_BPYRNA);
+  pt->draw = blender::multiplayer::MU_draw_multiplayer_buttons;
+  BLI_addtail(&art->paneltypes, pt);
+}
+
 void MU_draw_multiplayer_buttons(const bContext *C, Panel *panel)
 {
   /* Get RNA properties (once for speed). Got from #outliner_draw.cc. */
@@ -40,9 +57,6 @@ void MU_draw_multiplayer_buttons(const bContext *C, Panel *panel)
     props.connection_type = RNA_struct_type_find_property(&RNA_Multiplayer, "connection_type");
     props.use_ipv4 = RNA_struct_type_find_property(&RNA_Multiplayer, "use_ipv4");
     props.initialized = true;
-
-    // Initialize class
-    blender::multiplayer::MU_initialize_network_class(C);
   }
 
   Scene *scene = CTX_data_scene(C);

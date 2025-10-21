@@ -78,7 +78,9 @@
 #include "DEG_depsgraph.hh"
 #include "DEG_depsgraph_build.hh"
 
+#include "network_buttons.hh"
 #include "network_connector.hh"
+
 #include "view3d_intern.hh" /* own include */
 #include "view3d_navigate.hh"
 
@@ -1686,6 +1688,7 @@ void ED_spacetype_view3d()
   BLI_addhead(&st->regiontypes, art);
 
   view3d_buttons_register(art);
+  blender::multiplayer::MU_panel_register(art);
 
   /* regions: tool(bar) */
   art = MEM_callocN<ARegionType>("spacetype view3d tools region");

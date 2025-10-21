@@ -6,6 +6,7 @@ set(INC
   PUBLIC .
   gizmo
   gizmo/intern
+  ../multiplayer
   ../compositor
   ../editors/include
   ../makesrna
@@ -111,6 +112,7 @@ set(LIB
   PRIVATE bf::sequencer
   bf_intern_ghost
   bf_compositor
+  bf_multiplayer
 )
 
 if(WIN32)

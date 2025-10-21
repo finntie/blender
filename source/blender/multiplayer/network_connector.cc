@@ -22,38 +22,15 @@
 
 #include "BLI_array.hh"
 #include "BLI_listbase.h"
+#include "BLI_string_utf8.h"
 
 #include "ED_mesh.hh"
 #include "ED_object.hh"
 #include "ED_screen.hh"
 
-/* TODO: what is needed? */
-#include "DNA_armature_types.h"
-#include "DNA_collection_types.h"
-#include "DNA_constraint_types.h"
-#include "DNA_gpencil_legacy_types.h"
-#include "DNA_light_types.h"
-#include "DNA_lightprobe_types.h"
-#include "DNA_object_force_types.h"
 #include "DNA_scene_types.h"
-#include "DNA_sequence_types.h"
-#include "DNA_text_types.h"
 
 
-#include "BKE_armature.hh"
-#include "BKE_curve.hh"
-#include "BKE_deform.hh"
-#include "BKE_gpencil_legacy.h"
-#include "BKE_grease_pencil.hh"
-#include "BKE_idtype.hh"
-#include "BKE_lib_override.hh"
-#include "BKE_main_namemap.hh"
-#include "BKE_modifier.hh"
-#include "BKE_node.hh"
-#include "BKE_object.hh"
-#include "BKE_particle.h"
-#include "BKE_report.hh"
-#include "BKE_scene.hh"
 
 /* Custom check if transform update. */
 #define NETWORK_UPDATE_TRANSFORM ((void *)0xABBACAAC)
@@ -82,17 +59,13 @@ void MU_initialize_network_class(const bContext *C)
 
   MU_class_object.MU_init(true, false);
 
-  /* Create Timer */
-  wmWindowManager *wm = CTX_wm_manager(CurrentContext);
-  wmTimer *timer = WM_event_timer_add(wm, CTX_wm_window(CurrentContext), TIMER, 0.1f);
-
-  /* Register and call operator */
-  WM_operatortype_append(MU_initialize_operator);
+  WM_operatortype_append(MU_timer_operator);
   WM_operator_name_call(const_cast<bContext *>(CurrentContext),
                         "NETWORK_MU_connection_alive",
                         blender::wm::OpCallContext::InvokeDefault,
                         nullptr,
                         nullptr);
+
 
   /* Create packages */
   /* Contains: loc.x, loc.y, loc.z, rot.x, rot.y, rot.z, scale.x, scale.y, scale.z */
@@ -113,43 +86,6 @@ void MU_add_client_to_vector(bContext *, void *poin, void *)
 blender::Vector<std::string> MU_get_clients_vector()
 {
   return ClientIPs;
-}
-
-static wmOperatorStatus MU_operator_invoke_timer(bContext *C, wmOperator *op, const wmEvent *event)
-{
-  wmWindowManager *wm = CTX_wm_manager(C);
-  wmWindow *window = CTX_wm_window(C);
-
-  wmTimer *timer = WM_event_timer_add(wm, window, wmEventType::TIMER, 0.1f);
-  op->customdata = timer;
-
-  WM_event_add_modal_handler(C, op);
-  return OPERATOR_RUNNING_MODAL;
-}
-
-static wmOperatorStatus MU_operator_modal_timer(bContext *C, wmOperator *op, const wmEvent *event)
-{
-  wmTimer *timer = reinterpret_cast<wmTimer *>(op->customdata);
-
-  if (event->type == wmEventType::TIMER && event->customdata == timer) {
-    /* Keep connection alive to enable for important message checks */
-    MU_class_object.MU_keep_alive(timer->time_duration);
-  }
-
-  return OPERATOR_PASS_THROUGH;
-}
-
-void MU_initialize_operator(wmOperatorType *ot)
-{
-  /*Create timer that is called every 0.1 seconds. */
-  ot->name = "Keep Connection Alive";
-  ot->idname = "NETWORK_MU_connection_alive";
-
-  ot->invoke = MU_operator_invoke_timer;
-  ot->modal = MU_operator_modal_timer;
-
-  /* flags */
-  ot->flag = 0;
 }
 
 void MU_host_same_device(bContext *, void *poin, void *)
@@ -282,5 +218,47 @@ void MU_package_update_object(const std::string &buffer)
   /* Create object using message */
   MU_message_to_object(const_cast<bContext *>(CurrentContext), buffer);
 }
+
+/* -------------------------------------------------------------------- */
+/** \Operator types
+ * \{ */
+
+static wmOperatorStatus MU_operator_invoke_timer(bContext *C, wmOperator *op, const wmEvent *event)
+{
+  wmWindowManager *wm = CTX_wm_manager(C);
+  wmWindow *window = CTX_wm_window(C);
+
+  wmTimer *timer = WM_event_timer_add(wm, window, wmEventType::TIMER, 0.1f);
+  op->customdata = timer;
+
+  WM_event_add_modal_handler(C, op);
+  return OPERATOR_RUNNING_MODAL;
+}
+
+static wmOperatorStatus MU_operator_modal_timer(bContext *C, wmOperator *op, const wmEvent *event)
+{
+  wmTimer *timer = reinterpret_cast<wmTimer *>(op->customdata);
+
+  if (event->type == wmEventType::TIMER && event->customdata == timer) {
+    /* Keep connection alive to enable for important message checks */
+    MU_class_object.MU_keep_alive(timer->time_duration);
+  }
+
+  return OPERATOR_PASS_THROUGH;
+}
+
+void MU_timer_operator(wmOperatorType *ot)
+{
+  /*Create timer that is called every 0.1 seconds. */
+  ot->name = "Keep Connection Alive";
+  ot->idname = "NETWORK_MU_connection_alive";
+
+  ot->invoke = MU_operator_invoke_timer;
+  ot->modal = MU_operator_modal_timer;
+
+  /* flags */
+  ot->flag = 0;
+}
+/** \} */
 
 }  // namespace blender::multiplayer
