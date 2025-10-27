@@ -31,27 +31,14 @@
 #include "DNA_scene_types.h"
 
 
-
-/* Custom check if transform update. */
-#define NETWORK_UPDATE_TRANSFORM ((void *)0xABBACAAC)
-
 namespace blender::multiplayer {
 
 Dance MU_class_object;
 const bContext *CurrentContext;
+static std::string ownPrivateIP;
+static std::string ownPublicIP;
+
 static blender::Vector<std::string> ClientIPs;
-
-void MU_printRandomStatement(bContext *, void *, void *)
-{
-  return;
-
-  //Multiplayer *mp = static_cast<Multiplayer *>(poin);
-
-  //const char *message = mp->host_ip;
-  //printf("Message containing: %s, will be send:\n", message);
-
-  //MU_class_object.MU_send_message_to(std::string(message), 0, false, true, false);
-}
 
 void MU_initialize_network_class(const bContext *C)
 {
@@ -59,13 +46,11 @@ void MU_initialize_network_class(const bContext *C)
 
   MU_class_object.MU_init(true, false);
 
-  WM_operatortype_append(MU_timer_operator);
-  WM_operator_name_call(const_cast<bContext *>(CurrentContext),
-                        "NETWORK_MU_connection_alive",
-                        blender::wm::OpCallContext::InvokeDefault,
-                        nullptr,
-                        nullptr);
+  ownPrivateIP = MU_class_object.MU_get_IP(false);
+  ownPublicIP = MU_class_object.MU_get_IP(true);
 
+  /* Register and call operator */
+  WM_operatortype_append(MU_timer_operator);
 
   /* Create packages */
   /* Contains: loc.x, loc.y, loc.z, rot.x, rot.y, rot.z, scale.x, scale.y, scale.z */
@@ -80,7 +65,74 @@ void MU_initialize_network_class(const bContext *C)
 void MU_add_client_to_vector(bContext *, void *poin, void *)
 {
   Multiplayer *mp = static_cast<Multiplayer *>(poin);
+  /* At least 4 of size. */
+  if (strlen(mp->host_ip) > 4) {
   ClientIPs.append(mp->host_ip);
+  }
+}
+
+void MU_remove_client_from_vector(bContext *, void *poin, void *)
+{
+  int* index = static_cast<int*>(poin);
+  printf("index: %d\n", *index);
+  if (*index >= 0 && *index < ClientIPs.size()) {
+    ClientIPs.remove(*index);
+  }
+}
+
+std::string MU_get_own_private_IP()
+{
+  return ownPrivateIP;
+}
+
+std::string MU_get_own_public_IP()
+{
+  return ownPublicIP;
+}
+
+void MU_force_IPV4_button(bContext *, void *poin, void *)
+{
+  /* Refresh IP */
+  Multiplayer *mp = static_cast<Multiplayer *>(poin);
+  if (mp) {
+    bool forceIPV4 = mp->use_ipv4;
+    MU_class_object.MU_set_force_IPV4(forceIPV4);
+    ownPublicIP = MU_class_object.MU_get_IP(true);
+  }
+}
+
+static void MU_text_to_clipboard(std::string& text)
+{
+  // Copy Code to clipboard:
+  if (OpenClipboard(GW_HWNDFIRST)) {
+    // Using windows global memory.
+    HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, text.length() + 1);
+    if (hMem) {
+      auto hMemLock = GlobalLock(hMem);
+      if (hMemLock) {
+        memcpy(hMemLock, text.c_str(), text.length());
+        ((char *)hMemLock)[text.length()] = '\0';
+        GlobalUnlock(hMem);
+
+        EmptyClipboard();
+        SetClipboardData(CF_TEXT, hMem);
+      }
+      else {
+        GlobalFree(hMem);
+      }
+    }
+    CloseClipboard();
+  }
+}
+
+void MU_private_IP_to_clipboard(bContext *, void *, void *)
+{
+  MU_text_to_clipboard(ownPrivateIP);
+}
+
+void MU_public_IP_to_clipboard(bContext *, void *, void *)
+{
+  MU_text_to_clipboard(ownPublicIP); 
 }
 
 blender::Vector<std::string> MU_get_clients_vector()
@@ -88,7 +140,7 @@ blender::Vector<std::string> MU_get_clients_vector()
   return ClientIPs;
 }
 
-void MU_host_same_device(bContext *, void *poin, void *)
+void MU_host(bContext *, void *poin, void *)
 {
   Dance::dance_moves moves = Dance::SAMEDEVICE;
   int port = 8392;
@@ -100,12 +152,18 @@ void MU_host_same_device(bContext *, void *poin, void *)
     port = mp->port;
     force_ipv4 = static_cast<bool>(mp->use_ipv4);
   }
+
+  WM_operator_name_call(const_cast<bContext *>(CurrentContext),
+                        "NETWORK_MU_connection_alive",
+                        blender::wm::OpCallContext::InvokeDefault,
+                        nullptr,
+                        nullptr);
 
   MU_class_object.MU_host(moves, 10, std::to_string(port).c_str(), force_ipv4, ClientIPs);
   // blender::multiplayer::MU_reset_scene(CurrentContext);
 }
 
-void MU_connect_same_device(bContext *, void *poin, void *)
+void MU_connect(bContext *, void *poin, void *)
 {
   Dance::dance_moves moves = Dance::SAMEDEVICE;
   int port = 8392;
@@ -118,8 +176,15 @@ void MU_connect_same_device(bContext *, void *poin, void *)
     force_ipv4 = static_cast<bool>(mp->use_ipv4);
   }
 
+  if (MU_class_object.MU_connect(
+          moves, ClientIPs[0].c_str(), std::to_string(port).c_str(), force_ipv4))
+  {
 
-  if (MU_class_object.MU_connect(moves, ClientIPs[0].c_str(), std::to_string(port).c_str(), force_ipv4)) {
+    WM_operator_name_call(const_cast<bContext *>(CurrentContext),
+                          "NETWORK_MU_connection_alive",
+                          blender::wm::OpCallContext::InvokeDefault,
+                          nullptr,
+                          nullptr);
     // Succeeded
     // blender::multiplayer::MU_reset_scene(CurrentContext);
   }
@@ -129,11 +194,6 @@ void MU_handle_transform(Object *ob)
 {
   if (ob && MU_class_object.MU_get_total_connections() > 0) {
 
-    // Main *bmain = CTX_data_main(CurrentContext);
-
-    // if (bmain) {
-    //   BKE_libblock_rename(*bmain, ob->id, "CubeName");
-    // }
     std::string objectName = ob->id.name;
 
     MU_class_object.MU_add_data_to_parameter<std::string>("Object_Transform", 0, objectName);
@@ -187,8 +247,7 @@ void MU_package_transform(const std::string &buffer)
                         MU_class_object.MU_data_to_variable<float>(buffer, 10),
                         MU_class_object.MU_data_to_variable<float>(buffer, 11)};
 
-      if (memcmp(loc, ob->loc, 3 * sizeof(float)) &&
-          memcmp(rot, ob->rot, 3 * sizeof(float)) &&
+      if (memcmp(loc, ob->loc, 3 * sizeof(float)) && memcmp(rot, ob->rot, 3 * sizeof(float)) &&
           memcmp(scale, ob->scale, 3 * sizeof(float)))
       {
         return;
@@ -204,11 +263,9 @@ void MU_package_transform(const std::string &buffer)
       memcpy(ob->rot, rot, 3 * sizeof(float));
       memcpy(ob->scale, scale, 3 * sizeof(float));
 
-
       /* Notify blender that this object changed its transform. */
       DEG_id_tag_update(&ob->id, ID_RECALC_TRANSFORM);
-      WM_event_add_notifier(CurrentContext, NC_OBJECT | ND_TRANSFORM, NETWORK_UPDATE_TRANSFORM);
-
+      WM_event_add_notifier(CurrentContext, NC_OBJECT | ND_TRANSFORM | NS_NETWORK, CTX_data_scene(CurrentContext));
     }
   }
 }

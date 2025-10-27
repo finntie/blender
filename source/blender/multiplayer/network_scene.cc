@@ -14,14 +14,9 @@
 #include "BKE_scene.hh"
 #include "BKE_screen.hh"
 
-extern "C" {
-#include "BKE_mesh.h"
-#include "BKE_mesh_legacy_convert.hh"  // Some functions might be here
-}
-
-#include "BKE_mesh_runtime.hh"
 #include "BKE_attribute.hh"
 #include "BKE_mesh_mapping.hh"
+#include "BKE_mesh_runtime.hh"
 
 #include "DNA_object_types.h"
 
@@ -141,33 +136,9 @@ std::string MU_object_to_message(Object *ob, const char *package_name)
         ss << vertpos.x << " " << vertpos.y << " " << vertpos.z << " ";
       }
 
-      /* Debug */
-      
-        std::stringstream ss2(ss.str());
-        std::string d;
-        ss2 >> d >> d >> d >> d >> d >> d >> d >> d >> d;
-
-
-        for (int j = 0; j < mesh->vert_positions().size(); j++) {
-          float x, y, z;
-          ss2 >> x >> y >> z;
-          printf("Vertexpos[%d] = %f, %f, %f\n", j, x, y, z);
-        }
-        printf("Total of %d vertices\n", i);
-      
-
       /* Add all edges */
       for (const auto edge : edges) {
         ss << edge.x << " " << edge.y << " ";
-      }
-
-      /* Debug */
-      {
-        i = 0;
-        for (const auto edge : edges) {
-          printf("Edges[%d] = %d, %d\n", i, edge.x, edge.y);
-          i++;
-        }
       }
 
       /* Add all faces */
@@ -213,9 +184,8 @@ void MU_message_to_object(bContext *C, std::string message)
   }
 
   std::stringstream ss(message);
-  //ss.str().reserve(1024 * 64); /*64 KB */
-  //ss.str(message);
-
+  // ss.str().reserve(1024 * 64); /*64 KB */
+  // ss.str(message);
 
   /* first 2 values are useless values. */
   std::string useless;
@@ -239,39 +209,14 @@ void MU_message_to_object(bContext *C, std::string message)
   ss >> verts_num >> edges_num >> faces_num >> corn_verts_num >> corn_edges_num;
 
   Mesh *mesh = BKE_mesh_new_nomain(verts_num, edges_num, faces_num, corn_verts_num);
-  
-  BKE_main_global_namemap_get_unique_name(*bmain, mesh->id, mesh->id.name);
 
-  printf("Message size: %zu bytes\n", message.size());
-  printf("Message content length: %zu chars\n", message.length());
-  int space_count = std::count(message.begin(), message.end(), ' ');
-  int expected_spaces = verts_num * 3 + edges_num * 2 + faces_num * 2 + corn_verts_num + corn_edges_num;
-  printf("Spaces in message: %d, expected: %d\n", space_count, expected_spaces);
+  BKE_main_global_namemap_get_unique_name(*bmain, mesh->id, mesh->id.name);
 
   blender::MutableSpan<blender::float3> verts = mesh->vert_positions_for_write();
   blender::MutableSpan<blender::int2> edge = mesh->edges_for_write();
   blender::MutableSpan<int> face = mesh->face_offsets_for_write();
   blender::MutableSpan<int> corn_verts = mesh->corner_verts_for_write();
   blender::MutableSpan<int> corn_edges = mesh->corner_edges_for_write();
-
-  // for (int i = 0; i < verts_num; i++) {
-  //  float x = 0;
-  //   float y = 0;
-  //  float z = 0;
-  //   ss >> x >> y >> z;
-  // 
-  //  printf("  verts[%d] = %f, %f, %f\n", i, x, y, z);
-  //  //ss >> verts[i].x >> verts[i].y >> verts[i].z;
-  //}
-  // for (int i = 0; i < edges_num; i++) {
-  //   int x = 0;
-  //   int y = 0;
-  //   ss >> x >> y;
-
-  //   printf("  verts[%d] = %d, %d\n", i, x, y);
-
-  //   // ss >> verts[i].x >> verts[i].y >> verts[i].z;
-  // }
 
   for (int i = 0; i < verts_num; i++) {
     ss >> verts[i].x >> verts[i].y >> verts[i].z;
@@ -280,52 +225,32 @@ void MU_message_to_object(bContext *C, std::string message)
   for (int i = 0; i < edges_num; i++) {
     ss >> edge[i].x >> edge[i].y;
 
-    if (edge[i][0] < 0 || edge[i][0] >= verts_num || edge[i][1] < 0 || edge[i][1] >= verts_num)
-    {
+    if (edge[i][0] < 0 || edge[i][0] >= verts_num || edge[i][1] < 0 || edge[i][1] >= verts_num) {
       printf("Invalid edge indices: %d, %d\n", edge[i][0], edge[i][1]);
       return;
     }
   }
 
+  if (faces_num > 0) {
   face[0] = 0;
-  int total_corners = 0;
   for (int i = 0; i < faces_num; i++) {
     int start, size;
     ss >> start >> size;
 
-    if (size < 3) {  // Faces need at least 3 vertices
-      printf("Invalid face size: %d\n", size);
-      return;
-    }
-    total_corners += size;
     if (i + 1 < faces_num) {
       face[i + 1] = start + size;
     }
   }
-
-  // Verify corner count matches
-  if (total_corners != corn_verts_num) {
-    printf("Corner count mismatch: expected %d, got %d\n", corn_verts_num, total_corners);
-    return;
   }
 
   for (int i = 0; i < corn_verts_num; i++) {
     ss >> corn_verts[i];
-
-      if (corn_verts[i] < 0 || corn_verts[i] >= verts_num) {
-      printf("Invalid corner vertex index: %d\n", corn_verts[i]);
-      return;
-    }
   }
+
   for (int i = 0; i < corn_edges_num; i++) {
     ss >> corn_edges[i];
-
-      if (corn_edges[i] < 0 || corn_edges[i] >= edges_num) {
-      printf("Invalid corner edge index: %d\n", corn_edges[i]);
-      return;
-    }
   }
-  
+
   if (ss.fail()) {
     printf("SS failed\n");
   }
@@ -333,21 +258,29 @@ void MU_message_to_object(bContext *C, std::string message)
   mesh->tag_positions_changed();
   mesh->tag_topology_changed();
 
+  /* Make faces flat/sharp and not smooth, this would create weird shados on normal cubes. */
+  blender::bke::MutableAttributeAccessor attributes = mesh->attributes_for_write();
+  blender::bke::SpanAttributeWriter<bool> flat_faces =
+      attributes.lookup_or_add_for_write_span<bool>("sharp_face", bke::AttrDomain::Face);
+  flat_faces.span.fill(true);
+  flat_faces.finish();
+
   // Validate the mesh structure
   if (BKE_mesh_validate(mesh, true, true)) {
     printf("Change made to the mesh\n");
   }
 
- // BLI_addtail(&bmain->meshes, mesh);
+  // BLI_addtail(&bmain->meshes, mesh);
 
   Object *ob = BKE_object_add_only_object(bmain, type, name.c_str());
   ob->data = mesh;
-  //id_us_plus(&ob->id);
+  // id_us_plus(&ob->id);
 
   BKE_collection_object_add(bmain, scene->master_collection, ob);
   BKE_view_layer_synced_ensure(scene, view_layer);
 
-  WM_event_add_notifier(C, NC_SCENE | ND_LAYER_CONTENT, scene);
+  WM_event_add_notifier(C, NC_SCENE | ND_LAYER_CONTENT | NS_NETWORK, scene);
+
   DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
   DEG_relations_tag_update(bmain);
 

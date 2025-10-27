@@ -7,25 +7,25 @@ struct Object;
 struct wmOperatorType;
 namespace blender::multiplayer {
 
-/**
- * Sends message
- *
- * \param poin: name of the property
- * \param poin2: nothing
- */
-void MU_printRandomStatement(bContext *C, void *poin, void *poin2);
-
-
-
 void MU_initialize_network_class(const bContext *C);
 
 void MU_add_client_to_vector(bContext *C, void *poin, void *poin2);
 
+void MU_remove_client_from_vector(bContext *, void *poin, void *);
+
+std::string MU_get_own_private_IP();
+std::string MU_get_own_public_IP();
+
+void MU_force_IPV4_button(bContext *, void *poin, void *);
+
+void MU_private_IP_to_clipboard(bContext *, void *, void *);
+void MU_public_IP_to_clipboard(bContext *, void *, void *);
+
 blender::Vector<std::string> MU_get_clients_vector();
 
-void MU_host_same_device(bContext *C, void *poin, void *poin2);
+void MU_host(bContext *C, void *poin, void *poin2);
 
-void MU_connect_same_device(bContext *C, void *poin, void *poin2);
+void MU_connect(bContext *C, void *poin, void *poin2);
 
 /* Called when object changes transform */
 void MU_handle_transform(Object* ob);

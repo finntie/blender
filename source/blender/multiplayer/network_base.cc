@@ -89,6 +89,9 @@ void Dance::MU_host(Dance::dance_moves moves,
    * \{ */
 
   force_IPV4_ = _force_IPV4;
+  if (force_IPV4_) {
+    ipv_ = AF_INET;
+  }
   current_moves_ = moves;
   is_host_ = true;
   max_connections_ = _max_connections;
@@ -201,7 +204,7 @@ void Dance::MU_host(Dance::dance_moves moves,
   }
 
   /* Get address info of the host (ourself). */
-  if ((status = getaddrinfo(own_IP, host_port_, &hints, &res)) != 0) {
+  if ((status = getaddrinfo(own_IP2, host_port_, &hints, &res)) != 0) {
     CLOG_ERROR(&LOG, "getaddrinfo error: %s", get_send_errors(WSAGetLastError()));
     return;
   }
@@ -295,6 +298,9 @@ bool Dance::MU_connect(dance_moves moves, const char *host_IP, const char *port,
   char own_IP[39] = " ";
 
   force_IPV4_ = _force_IPV4;
+  if (force_IPV4_) {
+    ipv_ = AF_INET;
+  }
   current_moves_ = moves;
   is_host_ = false;
   strcpy_s(other_IP, host_IP);
@@ -415,7 +421,7 @@ bool Dance::MU_connect(dance_moves moves, const char *host_IP, const char *port,
   }
 
   /* Bind only if public IP is used, the program does not need to bind elsewere. */
-  if (moves == PUBLIC) {
+  if (moves == PUBLIC || moves == LAN) {
     if (bind(sockfd_, res->ai_addr, int(res->ai_addrlen)) == -1) {
       CLOG_ERROR(&LOG, "Error on binding: %s", get_send_errors(WSAGetLastError()));
       reset_state();
@@ -465,6 +471,17 @@ bool Dance::MU_connect(dance_moves moves, const char *host_IP, const char *port,
     return false;
   }
 
+    /* Get name of other. */
+  getnameinfo(dest->ai_addr,
+              int(dest->ai_addrlen),
+              info_host,
+              sizeof(info_host),
+              info_service,
+              sizeof(info_service),
+              0);
+  std::string deviceName2 = info_host;
+
+
   /* Connect for windows to send the error message to this socket, otherwise it may not does this.
    */
   if (connect(sockfd_, dest->ai_addr, int(dest->ai_addrlen)) != 0) {
@@ -482,7 +499,7 @@ bool Dance::MU_connect(dance_moves moves, const char *host_IP, const char *port,
   }
 
   Sleep(50); /* Wait for package to arrive safely. */
-  char buffer[MAXPACKAGESIZE];
+  char buffer[NORMALPACKAGESIZE];
   int result = 0;
 
   /* Unblock socket. */
@@ -493,18 +510,25 @@ bool Dance::MU_connect(dance_moves moves, const char *host_IP, const char *port,
     return false;
   }
 
-  if ((result = recv(sockfd_, buffer, MAXPACKAGESIZE, MSG_PEEK)) < 0)
+  if ((result = recv(sockfd_, buffer, NORMALPACKAGESIZE, MSG_PEEK)) < 0)
   { /* This message can be assumed safely, since this is a conConfirm. */
-    if (WSAGetLastError() == 10054) { /* Connection reset by peer. */
+    if (WSAGetLastError() == 10035) { /* WSAEWOULDBLOCK, not fatal error, no data available YET */
+      /* Issue could be that the host is slow in processing messages, but we are able to reach the
+       * host at least. */
+      CLOG_WARN(&LOG, "Errorcode: 10035, no data available from the host yet. proceeded connection.");
+    }
+    else if (WSAGetLastError() == 10054) { /* Connection reset by peer. */
       CLOG_WARN(&LOG, "Could not connect to socket, is the host connected?");
       reset_state();
       return false;
     }
-    CLOG_ERROR(&LOG,
-               "Receive error trying to connect, did the host lag out?: %s",
-               get_send_errors(WSAGetLastError()));
-    reset_state();
-    return false;
+    else {
+      CLOG_ERROR(&LOG,
+                 "Receive error trying to connect, did the host lag out?: %s",
+                 get_send_errors(WSAGetLastError()));
+      reset_state();
+      return false;
+    }
   }
 
   /* Block socket again. */
@@ -514,6 +538,9 @@ bool Dance::MU_connect(dance_moves moves, const char *host_IP, const char *port,
     reset_state();
     return false;
   }
+
+  freeaddrinfo(dest);
+
 
   /** \} */
 
@@ -814,19 +841,20 @@ bool Dance::listen(bool keep_checking)
         memcpy_s(
             listen_buffer, sizeof(listen_buffer), &listen_buffer[3], sizeof(listen_buffer) - 3);
         std::string buf(listen_buffer);
-        std::string ID = std::string(get_word(buf, 0));
-        /* Remove Imp ID from buffer. */
+        std::string user_ID = std::string(get_word(buf, 0));
+        /* Remove Imp user ID from buffer. */
         memcpy_s(listen_buffer,
                  sizeof(listen_buffer),
-                 &listen_buffer[ID.length() + 1],
-                 sizeof(listen_buffer) - (ID.length() + 1));
+                 &listen_buffer[user_ID.length() + 1],
+                 sizeof(listen_buffer) - (user_ID.length() + 1));
+
         buf = listen_buffer;
-        std::string ID_message = std::string(get_word(buf, 0));
-        /* Remove Message ID from buffer. */
+        std::string message_ID = std::string(get_word(buf, 0));
+        /* Remove Imp message ID from buffer. */
         memcpy_s(listen_buffer,
                  sizeof(listen_buffer),
-                 &listen_buffer[ID_message.length() + 1],
-                 sizeof(listen_buffer) - (ID_message.length() + 1));
+                 &listen_buffer[message_ID.length() + 1],
+                 sizeof(listen_buffer) - (message_ID.length() + 1));
 
         bool long_full = true;
         /* Check if it is a long message */
@@ -850,6 +878,14 @@ bool Dance::listen(bool keep_checking)
                    sizeof(listen_buffer),
                    &listen_buffer[idx_last],
                    sizeof(listen_buffer) - idx_last);
+
+          buf = listen_buffer;
+          std::string ID_message = std::string(get_word(buf, 0));
+          /* Remove Message ID from buffer. */
+          memcpy_s(listen_buffer,
+                   sizeof(listen_buffer),
+                   &listen_buffer[ID_message.length() + 1],
+                   sizeof(listen_buffer) - (ID_message.length() + 1));
 
           /* Add value to map */
           blender::Map<std::string, std::string> batch_map;
@@ -882,7 +918,7 @@ bool Dance::listen(bool keep_checking)
               }
             }
             if (long_full) {
-              long_message_storage_.remove(ID);
+              long_message_storage_.remove(user_ID + " " + message_ID);
               memcpy_s(
                   listen_buffer, sizeof(listen_buffer), fullMessage.c_str(), fullMessage.size());
             }
@@ -891,7 +927,8 @@ bool Dance::listen(bool keep_checking)
 
         /* Send back that it succeeded. */
         addrinfo *res = storage_to_addr_info(them_addr, addr_size);
-        const std::string return_message = "SImp" + ID; /* Succes Important. */
+        const std::string return_message = "SImp" + user_ID + " " +
+                                           message_ID; /* Succes Important. */
         send_message(return_message.c_str(), int(return_message.size()), res, false, nullptr);
 
         /* We do not want to handle batch messages seperately */
@@ -906,7 +943,7 @@ bool Dance::listen(bool keep_checking)
         memcpy_s(
             listen_buffer, sizeof(listen_buffer), &listen_buffer[4], sizeof(listen_buffer) - 4);
         /* Remove from array. */
-        important_send_messages_.remove(atoi(listen_buffer));
+        important_send_messages_.remove(listen_buffer);
         continue;
       }
 
@@ -940,9 +977,7 @@ bool Dance::listen(bool keep_checking)
             else /* Send again. */ {
 
               /* Get user_ID. */
-              const int userID = static_cast<int>(
-                  static_cast<float>(value.ID) /
-                  std::powf(10.0f, std::floorf(std::log10(static_cast<float>(value.ID)))));
+              const int userID = std::stoi(std::string(get_word(value.ID, 0)));
 
               /* TODO: is user_ID correct? */
               if (value.message.size() < 200) {
@@ -954,7 +989,7 @@ bool Dance::listen(bool keep_checking)
                 CLOG_WARN(&LOG, "Needed to send an important message a second time");
               }
 
-              const std::string imp_return_message = "Imp" + std::to_string(value.ID) + " " +
+              const std::string imp_return_message = "Imp" + value.ID + " " +
                                                      value.message; /* SImp = Succes Important. */
 
               for (const auto &item : them_addrss_.items()) {
@@ -1033,6 +1068,16 @@ bool Dance::listen(bool keep_checking)
       /** \} */
 
       /* -------------------------------------------------------------------- */
+      /** \Keep alive message which is trash
+       * \{ */
+
+      else if (std::strncmp(listen_buffer, "KeepAlive", 9) == 0) {
+        continue;
+      }
+
+      /** \} */
+
+      /* -------------------------------------------------------------------- */
       /** \Package-style message
        * \{ */
 
@@ -1100,32 +1145,40 @@ bool Dance::listen(bool keep_checking)
         continue;
       }
 
+      /* Only add to callback OR normal received storage, not to both. */
+      std::function<void(const std::string &)> *function = nullptr;
+      const std::string package_name = std::string(get_word(listen_buffer, 1));
+      if (!package_name.empty()) {
+        function = callback_functions_.lookup_ptr(package_name.c_str());
+      }
+
       /* Store package to queue. */
-      if (use_callback_functions_) {
+      if (use_callback_functions_ && function != nullptr) {
         callback_mutex_.lock();
         user_package_storage_.push(listen_buffer);
         callback_mutex_.unlock();
       }
 
-      /* Store message. */
-      message_vector_mutex_.lock();
-      received_messages_.push_front(listen_buffer);
-      /* Delete oldest message if vector is too big. */
-      if (received_messages_.size() > max_size_message_vector_num) {
-        char error_buffer[256];
-        if (received_messages_.back().size() > 200) {
-          CLOG_WARN(&LOG,
-                    "Message getting deleted due to buffer being full: Could not print message "
-                    "(message was too long)");
+      /* Store message. (No connection messages) */
+      else if (!connecting_message) {
+        message_vector_mutex_.lock();
+        received_messages_.push_front(listen_buffer);
+        /* Delete oldest message if vector is too big. */
+        if (received_messages_.size() > max_size_message_vector_num) {
+          if (received_messages_.back().size() > 200) {
+            CLOG_WARN(&LOG,
+                      "Message getting deleted due to buffer being full: Could not print message "
+                      "(message was too long)");
+          }
+          else {
+            CLOG_WARN(&LOG,
+                      "Message getting deleted due to buffer being full: %s",
+                      received_messages_.back().c_str());
+          }
+          received_messages_.pop_back();
         }
-        else {
-          CLOG_WARN(&LOG,
-                    "Message getting deleted due to buffer being full: %s",
-                    received_messages_.back().c_str());
-        }
-        received_messages_.pop_back();
+        message_vector_mutex_.unlock();
       }
-      message_vector_mutex_.unlock();
 
       /* Only do this next part if it is a connection message */
       if (!connecting_message) {
@@ -1261,7 +1314,7 @@ void Dance::send_message(const char *message,
 {
   /* Check if message is too long to send, max is 1024, yet we check for 964 to be able to cut off
    * a word correctly and add other info */
-  if (message_size > 964) {
+  if (message_size > 1000) {
     int amount_messages = int(std::ceil(float(message_size) / 964));
     int start_index = 0;
     int at_index = 964;
@@ -1277,7 +1330,7 @@ void Dance::send_message(const char *message,
 
     for (int i = 0; i < amount_messages; i++) {
 
-      //printf("Sending message %d out of %d. \n", i, amount_messages);
+      // printf("Sending message %d out of %d. \n", i, amount_messages);
 
       const int copyAmount = 964;
 
@@ -1285,16 +1338,15 @@ void Dance::send_message(const char *message,
       memcpy(part_message, &message[start_index], copyAmount);
       part_message[copyAmount] = '\0'; /* Null terminate */
 
-      /* Add format info */
+      /* Add Long and Message ID */
       char format_message[64];
-      sprintf_s(format_message, " Long%d/%d ", i, amount_messages - 1);
+      sprintf_s(format_message, "Long%d/%d %d ", i, amount_messages - 1, at_long_message);
       std::string seperate_message = format_message + std::string(part_message);
-
-      /* Add Message ID */
-      seperate_message = std::to_string(at_long_message) + seperate_message;
 
       /* Make important */
       add_important_message(seperate_message, peer_number);
+
+      printf("Sending message %d/%d\n", i, amount_messages - 1);
 
       /* Send message. */
       if (sendto(sockfd_,
@@ -1359,17 +1411,21 @@ Dance::important_message_struct Dance::add_important_message(std::string &messag
   important_message_struct important_message;
   if (SetID == 0) {
     /* Create ID based on count and user ID in the front. */
-    float mult = std::pow(10.0f,
-                          std::floorf(std::log10(static_cast<float>(at_imp_message_ * 10))));
-    important_message.ID = static_cast<uint32_t>(to_user_ID * mult) + at_imp_message_++;
+    // float mult = std::pow(10.0f,
+    //                       std::floorf(std::log10(static_cast<float>(at_imp_message_ * 10))));
+    // important_message.ID = static_cast<uint32_t>(to_user_ID * mult) + at_imp_message_++;
+
+    char ID_char[16];
+    sprintf_s(ID_char, "%i %d", to_user_ID, at_imp_message_++);
+    important_message.ID = ID_char;
   }
   else {
-    important_message.ID = SetID;
+    important_message.ID = std::to_string(SetID);
   }
   important_message.message = message;
   important_message.checks_done = 0;
   important_send_messages_.add(important_message.ID, important_message);
-  message = "Imp" + std::to_string(important_message.ID) + " " + message;
+  message = "Imp" + important_message.ID + " " + message;
   return important_message;
 }
 
@@ -1543,7 +1599,8 @@ std::string Dance::get_website()
   SOCKADDR_IN6 *socket_address_6;
   SOCKADDR_IN *socket_address;
   std::string website_HTLM;
-  char buffer[10000];
+  char buffer[2048];
+  memset(buffer, 0, 2048);
   std::string url = "api64.ipify.org";
   const std::string get_http = "GET / HTTP/1.1\r\nHost: " + url + "\r\nConnection: close\r\n\r\n";
 
@@ -1603,7 +1660,7 @@ std::string Dance::get_website()
   /* Sending a message to the site caused the site to send a message back with information.
    * We unpack this information (very badly) */
   int data_len;
-  while ((data_len = recv(socket_temp, buffer, 10000, 0)) > 0) {
+  while ((data_len = recv(socket_temp, buffer, 2048, 0)) > 0) {
     int i = 0;
     while (buffer[i] >= 32 || buffer[i] == '\n' || buffer[i] == '\r') {
       /* Checks for 2 new lines and a number after. Here is the IP */
@@ -1652,8 +1709,10 @@ void Dance::MU_send_message_to(
           return;
       }
     }
-    /* If here, #them_ID is not available. */
-    CLOG_ERROR(&LOG, "them ID is not found");
+    if (!to_all) {
+      /* If here, #them_ID is not available. */
+      CLOG_ERROR(&LOG, "them ID is not found");
+    }
     return;
   }
   else {           /* not host. */
@@ -1907,12 +1966,13 @@ const char *Dance::get_send_errors(int error_code)
     default:
       char buffer[256];
 
-      snprintf(buffer,
-               256,
-               "(errorCode: %i not implemented, view "
-               "https://learn.microsoft.com/en-us/windows/win32/winsock/"
-               "windows-sockets-error-codes-2 for more information\n",
-               error_code);
+      snprintf(
+          buffer,
+          256,
+          "(errorCode: %i not implemented, view "
+          "https://learn.microsoft.com/en-us/windows/win32/winsock/windows-sockets-error-codes-2"
+          "windows-sockets-error-codes-2 for more information\n",
+          error_code);
       output = buffer;
       break;
   }

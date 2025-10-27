@@ -572,6 +572,9 @@ struct wmNotifier {
 #define NS_EDITMODE_GREASE_PENCIL (12 << 8)
 #define NS_EDITMODE_POINTCLOUD (13 << 8)
 
+/* Check from network */
+#define NS_NETWORK (14 << 8)
+
 /* Subtype 3d view editing. */
 #define NS_VIEW3D_GPU (16 << 8)
 #define NS_VIEW3D_SHADING (17 << 8)

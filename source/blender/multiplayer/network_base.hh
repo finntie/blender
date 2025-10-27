@@ -19,7 +19,7 @@
 #include "BLI_vector.hh"
 
 #define MAXPACKAGESIZE 1024 * 64
-
+#define NORMALPACKAGESIZE 1024
 class Dance {
 
  public:
@@ -29,7 +29,7 @@ class Dance {
  private:
   struct important_message_struct {
     std::string message{};
-    uint32_t ID = 0;
+    std::string ID{};
     int checks_done = 0; /* How many checks it already did. */
   };
 
@@ -57,7 +57,7 @@ class Dance {
   float quick_keep_alive_time_ = 0.5f;
   int max_connections_ = 10; /* Standard is 10 */
   std::deque<std::string> received_messages_{};
-  blender::Map<uint32_t, important_message_struct> important_send_messages_{};
+  blender::Map<std::string, important_message_struct> important_send_messages_{};
   blender::Map<std::string, blender::Map<std::string, std::string>> long_message_storage_{};
   std::queue<std::string> user_package_storage_{};
   blender::Map<std::string, std::function<void(const std::string &)>> callback_functions_;
