@@ -1254,6 +1254,7 @@ bool Dance::listen(bool keep_checking)
         if (!got_them) {
           total_connections_++;
           hole_punch_confirmed_connections_.append(res);
+          return true;
         }
       }
     }

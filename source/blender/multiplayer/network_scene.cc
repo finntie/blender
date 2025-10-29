@@ -130,9 +130,7 @@ std::string MU_object_to_message(Object *ob, const char *package_name)
       Span<int> corner_edges = mesh->corner_edges();
 
       /* Add all vertex positions */
-      int i = 0;
       for (const auto vertpos : positions) {
-        i++;
         ss << vertpos.x << " " << vertpos.y << " " << vertpos.z << " ";
       }
 
